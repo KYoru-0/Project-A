@@ -30,7 +30,7 @@ vtuber_schema = {
             "index": {"type": "INTEGER"},
             "fanbase_name": {"type": "STRING"},
         },
-        "required": ["index", "facts"]
+        "required": ["index", "fanbase_name"]
     }
 }
 
@@ -81,7 +81,8 @@ for i in range(0, len(data), BATCH_SIZE):
                 ),
             )
             break
-        except:
+        except Exception as e:
+            print(e)
             time.sleep(5)
     
     response = json.loads(response.text)
@@ -92,5 +93,5 @@ for i in range(0, len(data), BATCH_SIZE):
             print(f"Fanbase name not found: {data[r['index']]['vtuber_names']['english_name']}")
         data[r['index']]['fanbase_name'] = fanbase_name if fanbase_name else None
     
-    with open(KB_DIR / "vtubers_fetched_facts.json", 'w', encoding='utf-8') as f:
+    with open(KB_DIR / "vtubers_fetched_fanbase_name.json", 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
