@@ -1,0 +1,25 @@
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 500px;
+    width: 300px;
+}
+
+.bg-green {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.bg-red {
+    background-color: #f44336;
+    color: white;
+}

@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "A",
+  "version": "0.1",
+  "permissions": ["tabCapture", "offscreen", "storage"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "output.html" },
+  "icons": { "256": "icons/256.png" }
+}
