@@ -2,6 +2,7 @@ let audioContext;
 let mediaStream;
 let sourceNode;
 let pitchNode;
+let socket;
 
 chrome.runtime.onMessage.addListener(async (message) => {
     if (message.type === 'start-capture') {
@@ -26,6 +27,24 @@ chrome.runtime.onMessage.addListener(async (message) => {
             sourceNode.connect(pitchNode);
             pitchNode.connect(audioContext.destination);
 
+            socket = new WebSocket('ws://127.0.0.1:8000/listen');
+
+            socket.onopen = () => {
+                console.log('Connected to server');
+            };
+
+            socket.onmessage = (event) => {
+                console.log('Server says:', event.data);
+            };
+
+            socket.onerror = (err) => {
+                console.error('Socket error:', err);
+            };
+
+            socket.onclose = () => {
+                console.log('Server connection closed');
+            };
+
             console.log('Audio graph running');
         } catch (e) {
             console.error('Error accessing media stream:', e);
@@ -38,6 +57,9 @@ chrome.runtime.onMessage.addListener(async (message) => {
         }
         if (audioContext) {
             audioContext.close();
+        }
+        if (socket) {
+            socket.close();
         }
 
         mediaStream = null;
