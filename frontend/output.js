@@ -32,6 +32,20 @@ const transcriptsEmptyState = document.getElementById('transcripts-empty-state')
 const translationEmptyState = document.getElementById('translation-empty-state');
 const transcriptsCountBadge = document.getElementById('transcripts-count-badge');
 const translationCountBadge = document.getElementById('translation-count-badge');
+const summaryBtn = document.getElementById('summary-btn');
+const summaryContentEl = document.getElementById('summary-content');
+let currentSummary = '';
+
+function updateSummaryUI(summaryText) {
+    currentSummary = (summaryText || '').trim();
+    if (summaryContentEl) {
+        if (currentSummary) {
+            summaryContentEl.textContent = currentSummary;
+        } else {
+            summaryContentEl.textContent = 'No summary available yet. Summary will generate as the stream progresses.';
+        }
+    }
+}
 
 const liveBubble = document.getElementById('live-bubble');
 const liveText = document.getElementById('live-text');
@@ -624,6 +638,10 @@ chrome.runtime.onMessage.addListener(async (message) => {
         };
         translationItems.push(batchItem);
         appendTranslationBatchCard(batchItem, true);
+        if (message.summary) {
+            updateSummaryUI(message.summary);
+            await chrome.storage.local.set({ kotoba_summary: message.summary });
+        }
         updateStats();
         if (translationItems.length > 150) translationItems.shift();
         await chrome.storage.local.set({ translationItems });

@@ -137,6 +137,7 @@ class TranslationResponse(BaseModel):
     sentences: int = Field(description="Number of Japanese sentences consumed (1 or 2).")
     relevant_comment: int = Field(default=0, description="1-based index (1-10) of the chat comment the speaker is responding to, or 0 if none.")
     relevant_comment_translation: str | None = Field(default=None, description="English translation of the relevant chat comment, or null.")
+    summary: str | None = Field(default=None, description="Concise running summary of the current conversation/stream topic and context so far, maximum 500 words.")
 
 # --- Sentence Extraction ---
 
@@ -172,26 +173,28 @@ Guidelines:
 2. The original text might be incomplete or malformed due to real-time speech recognition; translate based on natural spoken intent and phonetics.
 3. You will receive:
    - "Recent Live Stream Chat": Numbered list (1 to 10) of viewer comments the speaker may be reacting or replying to.
+   - "Running Stream Context Summary": Summary of the stream/conversation topic up to this point.
    - "Sentence 1 (Target Japanese)": The primary sentence to translate.
    - "Sentence 2 (Lookahead Japanese)": The immediate next sentence spoken, provided as forward context.
-   - "Previous Context": Up to 10 previous sentences.
 4. Coherence and Sentence Count Decision:
    - If Sentence 1 is a standalone thought, translate ONLY Sentence 1 and return `sentences: 1`.
    - If Sentence 1 and Sentence 2 form a single cohesive thought that MUST be translated together, translate BOTH and return `sentences: 2`.
 5. Chat Response Attribution:
    - If the speaker is responding to a specific comment, set `relevant_comment` to its 1-based index (1-10) and provide `relevant_comment_translation`.
    - If speaking independently, set `relevant_comment: 0` and `relevant_comment_translation: null`.
-6. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-10), "relevant_comment_translation"."""
+6. Context Summary:
+   - In `summary`, provide an updated running summary of the current stream context, topic, and storyline so far based on the inputs and previous summary (maximum 500 words, no minimum constraints). Keep it concise, coherent, and informative.
+7. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-10), "relevant_comment_translation", "summary"."""
 
 
 async def translate_japanese_stream(
-    sentence_1: str, sentence_2: str = "", context_history: list[str] = None,
+    sentence_1: str, sentence_2: str = "", current_summary: str = "",
     stream_title: str = "", stream_channel: str = "", recent_chat: list[dict] = None,
     vtuber_info: dict = None,
-) -> tuple[str, int, int, str]:
-    """Translate Japanese transcript to English. Returns (translation, sentences_consumed, relevant_comment_idx, relevant_comment_translation)."""
+) -> tuple[str, int, int, str, str]:
+    """Translate Japanese transcript to English using running summary context. Returns (translation, sentences_consumed, relevant_comment_idx, relevant_comment_translation, summary)."""
     if not gemini_client or not sentence_1.strip():
-        return "", 1, 0, ""
+        return "", 1, 0, "", ""
 
     prompt_parts = []
 
@@ -219,9 +222,8 @@ async def translate_japanese_stream(
         if lines:
             prompt_parts.append(f"Recent Live Stream Chat (Context):\n{lines}")
 
-    if context_history:
-        ctx = "\n".join([f"{i+1}. {c}" for i, c in enumerate(context_history[-10:])])
-        prompt_parts.append(f"Previous Context:\n{ctx}")
+    if current_summary:
+        prompt_parts.append(f"Running Stream Context Summary:\n{current_summary}")
 
     prompt_parts.append(f"Sentence 1 (Target Japanese):\n{sentence_1}")
     if sentence_2:
@@ -235,7 +237,7 @@ async def translate_japanese_stream(
                 system_instruction=TRANSLATION_SYSTEM_PROMPT,
                 response_mime_type="application/json",
                 response_schema=TranslationResponse,
-                temperature=0.3, max_output_tokens=300,
+                temperature=0.3, max_output_tokens=800,
             ),
         )
         if response and response.text:
@@ -247,10 +249,11 @@ async def translate_japanese_stream(
             rel = data.get("relevant_comment", 0)
             rel_trans = str(data.get("relevant_comment_translation") or "").strip()
             rel_idx = rel if isinstance(rel, int) and 1 <= rel <= 10 else 0
-            return trans, count, rel_idx, rel_trans
+            summary = str(data.get("summary") or "").strip()
+            return trans, count, rel_idx, rel_trans, summary
     except Exception as e:
         print(f"[Translation Error]: {e}", flush=True)
-    return "", 1, 0, ""
+    return "", 1, 0, "", ""
 
 # --- API ---
 
@@ -443,7 +446,10 @@ async def listen(
                 except (asyncio.CancelledError, websockets.ConnectionClosed):
                     pass
 
+            current_summary = ""
+
             async def process_translation_buffer():
+                nonlocal current_summary
                 try:
                     while True:
                         while not sentence_buffer:
@@ -462,10 +468,10 @@ async def listen(
                             continue
 
                         s1 = sentence_buffer[0]
-                        s2 = sentence_buffer[1] if len(sentence_buffer) >= 2 else None
-                        s2_text = s2["text"] if s2 else ""
-                        ctx = list(context_history[-10:])
-                        chat = list(live_chat_buffer[-10:])
+                        s2_text = sentence_buffer[1]["text"] if len(sentence_buffer) > 1 else ""
+
+                        ctx = list(context_history)
+                        chat = list(live_chat_buffer)
 
                         if not gemini_client:
                             del sentence_buffer[0]
@@ -473,10 +479,12 @@ async def listen(
                             if len(context_history) > 50: del context_history[:-50]
                             continue
 
-                        trans, consumed, rel_idx, rel_trans = await translate_japanese_stream(
-                            s1["text"], s2_text, ctx, title, display_channel_name, chat,
+                        trans, consumed, rel_idx, rel_trans, summary_text = await translate_japanese_stream(
+                            s1["text"], s2_text, current_summary, title, display_channel_name, chat,
                             vtuber_info=matched_vtuber,
                         )
+                        if summary_text:
+                            current_summary = summary_text
 
                         matched = None
                         if rel_idx > 0 and rel_idx <= len(chat):
@@ -508,6 +516,7 @@ async def listen(
                                     "original": original, "original_items": items,
                                     "translation": trans, "sentences": consumed,
                                     "relevant_comment_index": rel_idx, "relevant_comment": matched,
+                                    "summary": current_summary,
                                     "model": GEMINI_MODEL, "time": ts,
                                 })
                             except Exception:

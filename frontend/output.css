@@ -1134,3 +1134,71 @@ html, body {
     font-style: italic;
     padding: 6px 0;
 }
+
+/* ==================== Context Summary Popover ==================== */
+
+.summary-btn-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.summary-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 300px;
+    max-height: 240px;
+    background: rgba(12, 12, 16, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--border-highlight);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.8), 0 0 14px rgba(250, 204, 21, 0.2);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px) scale(0.97);
+    transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.summary-btn-wrap:hover .summary-popover,
+.summary-btn-wrap:focus-within .summary-popover {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.summary-popover-header {
+    padding: 7px 12px 5px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--color-yellow);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.summary-popover-body {
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #e4e4e7;
+    overflow-y: auto;
+    max-height: 190px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.summary-popover-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.summary-popover-body::-webkit-scrollbar-thumb {
+    background: rgba(250, 204, 21, 0.3);
+    border-radius: 2px;
+}

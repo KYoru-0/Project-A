@@ -32,6 +32,8 @@
     let cardNameEl = null, cardOfficeEl = null, cardFactsList = null, cardCloseBtn = null;
     let cardDescWrap = null, cardDescText = null, cardSeeMoreBtn = null;
     let channelHoverCard = null, channelHoverAvatar = null;
+    let summaryBtn = null, summaryContentEl = null;
+    let currentSummary = "";
     let lastVtuberProfile = null;
 
     let isOverlayOpen = false;
@@ -481,6 +483,23 @@
                                         <path d="M4.5 15.5C3.94772 15.5 3.5 15.0523 3.5 14.5V5.5C3.5 4.39543 4.39543 3.5 5.5 3.5H14.5C15.0523 3.5 15.5 3.94772 15.5 4.5"></path>
                                     </svg>
                                 </button>
+                                <div class="kotoba-summary-btn-wrap">
+                                    <button class="kotoba-pane-icon-btn" id="kotoba-summary-btn" title="Stream Context Summary">
+                                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            <polyline points="10 9 9 9 8 9"></polyline>
+                                        </svg>
+                                    </button>
+                                    <div class="kotoba-summary-popover" id="kotoba-summary-popover">
+                                        <div class="kotoba-summary-popover-header">
+                                            <span>Stream Context Summary</span>
+                                        </div>
+                                        <div class="kotoba-summary-popover-body" id="kotoba-summary-content">No summary available yet. Summary will generate as the stream progresses.</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="kotoba-feed-scroll" id="kotoba-translation-scroll">
@@ -580,6 +599,8 @@
         cardSeeMoreBtn = shadowRoot.getElementById('kotoba-card-see-more-btn');
         channelHoverCard = shadowRoot.getElementById('kotoba-channel-hover-card');
         channelHoverAvatar = shadowRoot.getElementById('kotoba-channel-hover-avatar');
+        summaryBtn = shadowRoot.getElementById('kotoba-summary-btn');
+        summaryContentEl = shadowRoot.getElementById('kotoba-summary-content');
         cardFactsList = shadowRoot.getElementById('kotoba-card-facts');
         cardCloseBtn = shadowRoot.getElementById('kotoba-card-close');
 
@@ -950,6 +971,17 @@
         chrome.runtime.sendMessage({ action: 'stopTabCapture' }, () => {});
     }
 
+    function updateSummaryUI(summaryText) {
+        currentSummary = (summaryText || '').trim();
+        if (summaryContentEl) {
+            if (currentSummary) {
+                summaryContentEl.textContent = currentSummary;
+            } else {
+                summaryContentEl.textContent = 'No summary available yet. Summary will generate as the stream progresses.';
+            }
+        }
+    }
+
     // ==================== State Persistence ====================
 
     function persistVideoStateDebounced() {
@@ -961,7 +993,8 @@
                 [`kotoba_state_${currentVideoId}`]: {
                     videoId: currentVideoId, metadata: extractYouTubeMetadata(),
                     transcriptItems: transcriptItems.slice(-300), translationItems: translationItems.slice(-300),
-                    activeRelevantComment, consecutiveNegativeCount, updatedAt: Date.now()
+                    activeRelevantComment, consecutiveNegativeCount,
+                    summary: currentSummary, updatedAt: Date.now()
                 },
                 kotoba_active_video_id: currentVideoId
             });
@@ -1009,10 +1042,12 @@
                 translationItems = saved.translationItems || [];
                 activeRelevantComment = saved.activeRelevantComment || null;
                 consecutiveNegativeCount = saved.consecutiveNegativeCount || 0;
+                updateSummaryUI(saved.summary || '');
                 renderFullFeedFromState();
             } else {
                 transcriptItems = []; translationItems = [];
                 activeRelevantComment = null; consecutiveNegativeCount = 0; liveChatMessages = [];
+                updateSummaryUI('');
                 if (transcriptsFeed) transcriptsFeed.innerHTML = '';
                 if (translationFeed) translationFeed.innerHTML = '';
                 if (transcriptsEmpty) transcriptsEmpty.style.display = 'block';
@@ -1120,6 +1155,9 @@
             };
             translationItems.push(batchItem);
             appendTranslationLine(batchItem);
+            if (message.summary) {
+                updateSummaryUI(message.summary);
+            }
             persistVideoStateDebounced();
 
             // Relevant comment attribution
