@@ -141,7 +141,8 @@ async function startRecording(data) {
 
         // 4. Connect to backend WebSocket
         const langParam = encodeURIComponent(data.lang || 'ja');
-        const wsUrl = `ws://127.0.0.1:8000/listen?language=${langParam}&model=nova-3&title=${encodeURIComponent(data.title || '')}&channel=${encodeURIComponent(data.channel || '')}&channel_link=${encodeURIComponent(data.channelLink || '')}`;
+        const translateParam = data.translate ? 'true' : 'false';
+        const wsUrl = `ws://127.0.0.1:8000/listen?language=${langParam}&model=nova-3&title=${encodeURIComponent(data.title || '')}&channel=${encodeURIComponent(data.channel || '')}&channel_link=${encodeURIComponent(data.channelLink || '')}&translate=${translateParam}`;
         socket = new WebSocket(wsUrl);
         socket.binaryType = 'arraybuffer';
 

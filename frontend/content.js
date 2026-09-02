@@ -52,6 +52,7 @@
     let translationEmpty = null;
     let transcriptsBadge = null;
     let translationBadge = null;
+    let translationToggle = null;
     let liveBubble = null;
     let liveText = null;
     let bubbleQueue = null;
@@ -533,7 +534,13 @@
                     </div>
                     <div class="kotoba-pane">
                         <div class="kotoba-pane-header">
-                            <span>Live Translation</span>
+                            <div class="kotoba-pane-title-group">
+                                <span>Live Translation</span>
+                                <label class="kotoba-switch" title="Toggle Live Translation">
+                                    <input type="checkbox" id="kotoba-translation-toggle">
+                                    <span class="kotoba-slider"></span>
+                                </label>
+                            </div>
                             <div class="kotoba-pane-header-actions">
                                 <span class="kotoba-pane-badge" id="kotoba-translation-badge">0 lines</span>
                                 <button class="kotoba-pane-icon-btn" id="kotoba-copy-translation" title="Copy Translations">
@@ -562,7 +569,7 @@
                             </div>
                         </div>
                         <div class="kotoba-feed-scroll" id="kotoba-translation-scroll">
-                            <div class="kotoba-empty-state" id="kotoba-translation-empty">Translations (2-sentence batches) will appear here.</div>
+                            <div class="kotoba-empty-state" id="kotoba-translation-empty">Translations are turned off</div>
                             <div class="kotoba-feed-list" id="kotoba-translation-feed"></div>
                         </div>
                     </div>
@@ -638,8 +645,17 @@
         translationScroll = shadowRoot.getElementById('kotoba-translation-scroll');
         transcriptsEmpty = shadowRoot.getElementById('kotoba-transcripts-empty');
         translationEmpty = shadowRoot.getElementById('kotoba-translation-empty');
-        transcriptsBadge = shadowRoot.getElementById('kotoba-transcripts-badge');
         translationBadge = shadowRoot.getElementById('kotoba-translation-badge');
+        translationToggle = shadowRoot.getElementById('kotoba-translation-toggle');
+        if (translationToggle) {
+            translationToggle.checked = false;
+            translationToggle.addEventListener('change', () => {
+                if (translationEmpty && translationItems.length === 0) {
+                    translationEmpty.textContent = translationToggle.checked ? 'Translations will appear here.' : 'Translations are turned off';
+                }
+            });
+        }
+        transcriptsBadge = shadowRoot.getElementById('kotoba-transcripts-badge');
         liveBubble = shadowRoot.getElementById('kotoba-live-bubble');
         liveText = shadowRoot.getElementById('kotoba-live-text');
         relevantChatSlot = shadowRoot.getElementById('kotoba-relevant-chat-slot');
@@ -811,7 +827,10 @@
             transcriptsFeed.innerHTML = '';
             translationFeed.innerHTML = '';
             transcriptsEmpty.style.display = 'block';
-            translationEmpty.style.display = 'block';
+            if (translationEmpty) {
+                translationEmpty.textContent = translationToggle && translationToggle.checked ? 'Translations will appear here.' : 'Translations are turned off';
+                translationEmpty.style.display = 'block';
+            }
             transcriptsBadge.textContent = '0 lines';
             translationBadge.textContent = '0 lines';
             liveBubble.style.display = 'none';
@@ -1034,6 +1053,9 @@
 
     function setCaptureState(active) {
         isCapturing = active;
+        if (translationToggle) {
+            translationToggle.disabled = active;
+        }
         if (active) {
             isTabAuthorized = true;
             toggleBtn.className = 'kotoba-btn kotoba-btn-danger';
@@ -1052,6 +1074,7 @@
         try {
             const meta = extractYouTubeMetadata();
             const selectedLang = langSelect ? langSelect.value : (localStorage.getItem('kotoba_selected_lang') || 'ja');
+            const isTranslationEnabled = translationToggle ? translationToggle.checked : false;
             chrome.runtime.sendMessage({
                 action: 'startTabCapture',
                 lang: selectedLang,
@@ -1059,7 +1082,8 @@
                 title: meta.title,
                 channel: resolvedVtuberName || meta.channel,
                 channelLink: meta.channelLink || '',
-                videoId: currentVideoId || getVideoIdFromUrl(window.location.href)
+                videoId: currentVideoId || getVideoIdFromUrl(window.location.href),
+                translate: isTranslationEnabled
             }, (res) => {
                 isBusy = false;
                 if (!res || !res.success) {
@@ -1141,7 +1165,10 @@
             if (translationBadge) translationBadge.textContent = `${translationItems.length} lines`;
             if (translationScroll) translationScroll.scrollTop = translationScroll.scrollHeight;
         } else {
-            if (translationEmpty) translationEmpty.style.display = 'block';
+            if (translationEmpty) {
+                translationEmpty.textContent = translationToggle && translationToggle.checked ? 'Translations will appear here.' : 'Translations are turned off';
+                translationEmpty.style.display = 'block';
+            }
             if (translationBadge) translationBadge.textContent = '0 lines';
         }
 
@@ -1173,7 +1200,10 @@
                 if (transcriptsFeed) transcriptsFeed.innerHTML = '';
                 if (translationFeed) translationFeed.innerHTML = '';
                 if (transcriptsEmpty) transcriptsEmpty.style.display = 'block';
-                if (translationEmpty) translationEmpty.style.display = 'block';
+                if (translationEmpty) {
+                    translationEmpty.textContent = translationToggle && translationToggle.checked ? 'Translations will appear here.' : 'Translations are turned off';
+                    translationEmpty.style.display = 'block';
+                }
                 if (transcriptsBadge) transcriptsBadge.textContent = '0 lines';
                 if (translationBadge) translationBadge.textContent = '0 lines';
                 if (liveBubble) liveBubble.style.display = 'none';

@@ -144,12 +144,16 @@
                 </div>
             </section>
 
-            <!-- Right Pane: Live Translation (2-Sentence Batches) -->
+            <!-- Right Pane: Live Translation -->
             <section class="feed-pane" id="pane-translation">
                 <div class="pane-header">
                     <div class="pane-title-group">
                         <span class="pane-icon">✨</span>
-                        <h2 class="pane-title">Translation (2-Sentence Batches)</h2>
+                        <h2 class="pane-title">Live Translation</h2>
+                        <label class="kotoba-switch" title="Toggle Live Translation">
+                            <input type="checkbox" id="translation-toggle">
+                            <span class="kotoba-slider"></span>
+                        </label>
                     </div>
                     <div class="pane-header-actions">
                         <span class="pane-badge highlight" id="translation-count-badge">0 translations</span>
@@ -188,8 +192,8 @@
                                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                             </svg>
                         </div>
-                        <p class="empty-title">Ready for Subtitles</p>
-                        <p class="empty-desc">Translated 2-sentence chunks with 10-sentence context memory will appear here.</p>
+                        <p class="empty-title" id="translation-empty-title">Translations are turned off</p>
+                        <p class="empty-desc" id="translation-empty-desc">Turn on the switch to enable AI translation.</p>
                     </div>
 
                     <div class="transcript-list" id="translation-list"></div>

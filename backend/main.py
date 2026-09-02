@@ -194,17 +194,22 @@ class TranslationResponse(BaseModel):
     )
 
 
-def extract_sentences_and_remainder(text: str, min_length: int = 30) -> tuple[list[str], str]:
-    """Extract complete sentences ending in punctuation only after reaching min_length (30 chars), returning remainder."""
+PUNCTUATION_PATTERN = re.compile(r"[.?!。！？…\n|।؟]")
+
+
+def extract_sentences_and_remainder(text: str, min_length: int = 0) -> tuple[list[str], str]:
+    """Extract text from start to the last punctuation mark as a sentence, returning remainder."""
     if not text or len(text) < min_length:
         return [], text
 
-    # Support English/European (.?!), Japanese/CJK (。！？…), Arabic (؟), Hindi (।), newlines, etc.
-    pattern = r"([^.?!。！？…\n|।؟]+[.?!。！？…\n|।؟]+)"
-    matches = list(re.finditer(pattern, text))
-    sentences = [m.group(1).strip() for m in matches if m.group(1).strip()]
-    last_end = matches[-1].end() if matches else 0
-    return sentences, text[last_end:].strip()
+    matches = list(PUNCTUATION_PATTERN.finditer(text))
+    if not matches:
+        return [], text.strip()
+
+    last_end = matches[-1].end()
+    sentence = text[:last_end].strip()
+    remainder = text[last_end:].strip()
+    return ([sentence], remainder) if sentence else ([], remainder)
 
 
 def split_sentences(text: str) -> list[str]:
@@ -213,7 +218,11 @@ def split_sentences(text: str) -> list[str]:
     if not text:
         return []
 
-    sentences, remainder = extract_sentences_and_remainder(text, min_length=0)
+    pattern = r"([^.?!。！？…\n|।؟]+[.?!。！？…\n|।؟]+)"
+    matches = list(re.finditer(pattern, text))
+    sentences = [m.group(1).strip() for m in matches if m.group(1).strip()]
+    last_end = matches[-1].end() if matches else 0
+    remainder = text[last_end:].strip()
     if remainder:
         sentences.append(remainder)
     return sentences if sentences else [text]
@@ -384,6 +393,7 @@ async def listen(
     title: str = "",
     channel: str = "",
     channel_link: str = "",
+    translate: bool = False,
 ) -> None:
     """Accept browser audio streams, proxy to Deepgram, and translate in batches."""
     await websocket.accept()
@@ -483,6 +493,13 @@ async def listen(
 
             async def receive_transcripts() -> None:
                 nonlocal pending_buffer
+                flush_timer_task: asyncio.Task | None = None
+
+                def cancel_flush_timer() -> None:
+                    nonlocal flush_timer_task
+                    if flush_timer_task and not flush_timer_task.done():
+                        flush_timer_task.cancel()
+                    flush_timer_task = None
 
                 async def flush_sentence(s: str, is_speech_final: bool = False) -> None:
                     nonlocal sentence_buffer
@@ -506,14 +523,12 @@ async def listen(
                     if sentence_buffer:
                         buffer_event.set()
 
-                async def process_pending_buffer(force_all: bool = False, is_speech_final: bool = False) -> None:
+                async def flush_completed_sentences(is_speech_final: bool = False) -> None:
                     nonlocal pending_buffer
                     if not pending_buffer:
                         return
 
-                    min_len = 0 if force_all else 30
-                    completed, pending_buffer = extract_sentences_and_remainder(pending_buffer, min_length=min_len)
-
+                    completed, pending_buffer = extract_sentences_and_remainder(pending_buffer, min_length=0)
                     for s in completed:
                         await flush_sentence(s, is_speech_final=is_speech_final)
 
@@ -527,6 +542,30 @@ async def listen(
                     except Exception:
                         pass
 
+                async def delayed_flush_runner() -> None:
+                    try:
+                        await asyncio.sleep(3.0)
+                        await flush_completed_sentences(is_speech_final=False)
+                        check_and_schedule_flush()
+                    except asyncio.CancelledError:
+                        pass
+                    finally:
+                        nonlocal flush_timer_task
+                        flush_timer_task = None
+
+                def check_and_schedule_flush() -> None:
+                    nonlocal flush_timer_task
+                    # When remainder reaches 30 chars AND has at least 1 completed sentence
+                    if len(pending_buffer) >= 30:
+                        test_completed, _ = extract_sentences_and_remainder(pending_buffer, min_length=0)
+                        if len(test_completed) >= 1:
+                            if flush_timer_task is None or flush_timer_task.done():
+                                flush_timer_task = asyncio.create_task(delayed_flush_runner())
+                            return
+
+                    # If condition is not met, cancel timer
+                    cancel_flush_timer()
+
                 try:
                     async for raw in dg_ws:
                         try:
@@ -537,7 +576,8 @@ async def listen(
                         msg_type = result.get("type")
 
                         if msg_type == "UtteranceEnd":
-                            await process_pending_buffer(force_all=True, is_speech_final=True)
+                            cancel_flush_timer()
+                            await flush_completed_sentences(is_speech_final=True)
                             continue
 
                         if msg_type != "Results":
@@ -563,7 +603,20 @@ async def listen(
 
                         if is_final:
                             pending_buffer = f"{pending_buffer} {transcript}".strip() if pending_buffer else transcript.strip()
-                            await process_pending_buffer(force_all=speech_final, is_speech_final=speech_final)
+                            if speech_final:
+                                cancel_flush_timer()
+                                await flush_completed_sentences(is_speech_final=True)
+                            else:
+                                check_and_schedule_flush()
+                                try:
+                                    await websocket.send_json({
+                                        "type": "transcript",
+                                        "transcript": pending_buffer,
+                                        "is_final": False,
+                                        "speech_final": False,
+                                    })
+                                except Exception:
+                                    pass
                         else:
                             display = f"{pending_buffer} {transcript}".strip() if pending_buffer else transcript.strip()
                             try:
@@ -577,11 +630,15 @@ async def listen(
                                 pass
                 except (asyncio.CancelledError, websockets.ConnectionClosed):
                     pass
+                finally:
+                    cancel_flush_timer()
 
             current_summary = ""
 
             async def process_translation_buffer() -> None:
                 nonlocal current_summary
+                if not translate:
+                    return
                 try:
                     while True:
                         while not sentence_buffer:

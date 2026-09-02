@@ -160,7 +160,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             model: message.model || 'nova-3',
                             title: message.title || '',
                             channel: message.channel || '',
-                            channelLink: message.channelLink || ''
+                            channelLink: message.channelLink || '',
+                            translate: Boolean(message.translate)
                         }
                     }, () => {
                         sendResponse({ success: true, streamId });

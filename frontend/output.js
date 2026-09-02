@@ -44,6 +44,21 @@ const transcriptsEmptyState = document.getElementById('transcripts-empty-state')
 const translationEmptyState = document.getElementById('translation-empty-state');
 const transcriptsCountBadge = document.getElementById('transcripts-count-badge');
 const translationCountBadge = document.getElementById('translation-count-badge');
+const translationToggle = document.getElementById('translation-toggle');
+const translationEmptyTitle = document.getElementById('translation-empty-title');
+const translationEmptyDesc = document.getElementById('translation-empty-desc');
+
+if (translationToggle) {
+    translationToggle.checked = false;
+    translationToggle.addEventListener('change', () => {
+        if (translationEmptyTitle) {
+            translationEmptyTitle.textContent = translationToggle.checked ? 'Translations will appear here.' : 'Translations are turned off';
+        }
+        if (translationEmptyDesc) {
+            translationEmptyDesc.textContent = translationToggle.checked ? 'Waiting for translated sentences...' : 'Turn on the switch to enable AI translation.';
+        }
+    });
+}
 
 const summaryBtn = document.getElementById('summary-btn');
 const summaryContentEl = document.getElementById('summary-content');
@@ -512,6 +527,7 @@ function closeVtuberModal() {
 // =============================================================================
 
 function updateCaptureUI(active) {
+    if (translationToggle) translationToggle.disabled = active;
     if (active) {
         toggleBtn.dataset.state = 'on';
         toggleBtn.className = 'btn btn-danger';
@@ -657,7 +673,15 @@ function renderAllPanes() {
     }
 
     if (translationItems.length === 0) {
-        if (translationEmptyState) translationEmptyState.style.display = 'flex';
+        if (translationEmptyState) {
+            translationEmptyState.style.display = 'flex';
+            if (translationEmptyTitle) {
+                translationEmptyTitle.textContent = translationToggle && translationToggle.checked ? 'Translations will appear here.' : 'Translations are turned off';
+            }
+            if (translationEmptyDesc) {
+                translationEmptyDesc.textContent = translationToggle && translationToggle.checked ? 'Waiting for translated sentences...' : 'Turn on the switch to enable AI translation.';
+            }
+        }
     } else {
         if (translationEmptyState) translationEmptyState.style.display = 'none';
         translationItems.forEach(item => appendTranslationBatchCard(item, false));
@@ -762,13 +786,15 @@ toggleBtn.addEventListener('click', async (event) => {
         btnLabel.textContent = 'Connecting...';
 
         const selectedLang = langSelect ? langSelect.value : (localStorage.getItem('kotoba_selected_lang') || 'ja');
+        const isTranslationEnabled = translationToggle ? translationToggle.checked : false;
         chrome.runtime.sendMessage({
             action: 'startTabCapture',
             tabId: currentTargetTabId,
             lang: selectedLang,
             model: 'nova-3',
             title: ytVideoTitle ? ytVideoTitle.textContent.trim() : '',
-            channel: ytChannelName ? ytChannelName.textContent.trim() : ''
+            channel: ytChannelName ? ytChannelName.textContent.trim() : '',
+            translate: isTranslationEnabled
         }, (res) => {
             isBusy = false;
             if (!res || !res.success) {
