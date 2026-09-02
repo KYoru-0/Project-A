@@ -182,7 +182,7 @@ class TranslationResponse(BaseModel):
     sentences: int = Field(description="Number of Japanese sentences consumed (1 or 2).")
     relevant_comment: int = Field(
         default=0,
-        description="1-based index (1-10) of the chat comment the speaker is responding to, or 0 if none.",
+        description="1-based index (1-20) of the chat comment the speaker is responding to, or 0 if none.",
     )
     relevant_comment_translation: str | None = Field(
         default=None,
@@ -194,8 +194,8 @@ class TranslationResponse(BaseModel):
     )
 
 
-def extract_sentences_and_remainder(text: str, min_length: int = 200) -> tuple[list[str], str]:
-    """Extract complete sentences ending in punctuation only after reaching min_length (200 chars), returning remainder."""
+def extract_sentences_and_remainder(text: str, min_length: int = 30) -> tuple[list[str], str]:
+    """Extract complete sentences ending in punctuation only after reaching min_length (30 chars), returning remainder."""
     if not text or len(text) < min_length:
         return [], text
 
@@ -230,7 +230,7 @@ Guidelines:
 1. Preserve conversational tone, emotions, humor, colloquialisms, and stream slang.
 2. The original text might be incomplete or malformed due to real-time speech recognition; translate based on natural spoken intent and phonetics.
 3. You will receive:
-   - "Recent Live Stream Chat": Numbered list (1 to 10) of viewer comments the speaker may be reacting or replying to.
+   - "Recent Live Stream Chat": Numbered list (1 to 20) of viewer comments the speaker may be reacting or replying to.
    - "Running Stream Context Summary": Summary of the stream/conversation topic up to this point.
    - "Sentence 1 (Target Japanese)": The primary sentence to translate.
    - "Sentence 2 (Lookahead Japanese)": The immediate next sentence spoken, provided as forward context.
@@ -238,11 +238,11 @@ Guidelines:
    - If Sentence 1 is a standalone thought, translate ONLY Sentence 1 and return `sentences: 1`.
    - If Sentence 1 and Sentence 2 form a single cohesive thought that MUST be translated together, translate BOTH and return `sentences: 2`.
 5. Chat Response Attribution:
-   - If the speaker is responding to a specific comment, set `relevant_comment` to its 1-based index (1-10) and provide `relevant_comment_translation`.
+   - If the speaker is responding to a specific comment, set `relevant_comment` to its 1-based index (1-20) and provide `relevant_comment_translation`.
    - If speaking independently, set `relevant_comment: 0` and `relevant_comment_translation: null`.
 6. Context Summary:
    - In `summary`, provide an updated running summary of the current stream context, topic, and storyline so far based on the inputs and previous summary (maximum 500 words, no minimum constraints). Keep it concise, coherent, and informative.
-7. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-10), "relevant_comment_translation", "summary"."""
+7. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-20), "relevant_comment_translation", "summary"."""
 
 
 async def translate_japanese_stream(
@@ -289,7 +289,7 @@ async def translate_japanese_stream(
         lines = "\n".join(
             [
                 f"{i + 1}. [{c.get('author', 'Viewer')}]: {c.get('message', '')}"
-                for i, c in enumerate(recent_chat[-10:])
+                for i, c in enumerate(recent_chat[-20:])
                 if c.get("message")
             ]
         )
@@ -325,7 +325,7 @@ async def translate_japanese_stream(
                 count = 1
             rel = data.get("relevant_comment", 0)
             rel_trans = str(data.get("relevant_comment_translation") or "").strip()
-            rel_idx = rel if isinstance(rel, int) and 1 <= rel <= 10 else 0
+            rel_idx = rel if isinstance(rel, int) and 1 <= rel <= 20 else 0
             summary = str(data.get("summary") or "").strip()
             return trans, count, rel_idx, rel_trans, summary
     except Exception as e:
@@ -506,6 +506,27 @@ async def listen(
                     if sentence_buffer:
                         buffer_event.set()
 
+                async def process_pending_buffer(force_all: bool = False, is_speech_final: bool = False) -> None:
+                    nonlocal pending_buffer
+                    if not pending_buffer:
+                        return
+
+                    min_len = 0 if force_all else 30
+                    completed, pending_buffer = extract_sentences_and_remainder(pending_buffer, min_length=min_len)
+
+                    for s in completed:
+                        await flush_sentence(s, is_speech_final=is_speech_final)
+
+                    try:
+                        await websocket.send_json({
+                            "type": "transcript",
+                            "transcript": pending_buffer,
+                            "is_final": False,
+                            "speech_final": False,
+                        })
+                    except Exception:
+                        pass
+
                 try:
                     async for raw in dg_ws:
                         try:
@@ -516,18 +537,7 @@ async def listen(
                         msg_type = result.get("type")
 
                         if msg_type == "UtteranceEnd":
-                            if pending_buffer.strip():
-                                await flush_sentence(pending_buffer.strip(), is_speech_final=True)
-                                pending_buffer = ""
-                                try:
-                                    await websocket.send_json({
-                                        "type": "transcript",
-                                        "transcript": "",
-                                        "is_final": False,
-                                        "speech_final": False,
-                                    })
-                                except Exception:
-                                    pass
+                            await process_pending_buffer(force_all=True, is_speech_final=True)
                             continue
 
                         if msg_type != "Results":
@@ -553,25 +563,7 @@ async def listen(
 
                         if is_final:
                             pending_buffer = f"{pending_buffer} {transcript}".strip() if pending_buffer else transcript.strip()
-                            completed, pending_buffer = extract_sentences_and_remainder(pending_buffer, min_length=200)
-
-                            for s in completed:
-                                await flush_sentence(s, is_speech_final=speech_final)
-
-                            if speech_final and pending_buffer.strip():
-                                await flush_sentence(pending_buffer.strip(), is_speech_final=True)
-                                pending_buffer = ""
-
-                            if pending_buffer:
-                                try:
-                                    await websocket.send_json({
-                                        "type": "transcript",
-                                        "transcript": pending_buffer,
-                                        "is_final": False,
-                                        "speech_final": False,
-                                    })
-                                except Exception:
-                                    pass
+                            await process_pending_buffer(force_all=speech_final, is_speech_final=speech_final)
                         else:
                             display = f"{pending_buffer} {transcript}".strip() if pending_buffer else transcript.strip()
                             try:
@@ -611,7 +603,7 @@ async def listen(
                         s2_text = sentence_buffer[1]["text"] if len(sentence_buffer) > 1 else ""
 
                         ctx = list(context_history)
-                        chat = list(live_chat_buffer)
+                        chat = list(live_chat_buffer[-20:])
 
                         if not gemini_client:
                             del sentence_buffer[0]
