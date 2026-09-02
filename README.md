@@ -80,23 +80,23 @@ Standard speech-to-text models and generic machine translation struggle with Jap
 
 ```mermaid
 flowchart TD
-    subgraph Browser ["Chrome Browser (Manifest V3)"]
+    subgraph Browser ["Chrome Browser: Manifest V3"]
         YT["YouTube Watch / Live Page"]
-        CS["Content Script (content.js)<br/>• Draggable/Resizable HUD<br/>• Live Chat Scraper<br/>• Bidirectional Highlight"]
-        BG["Background Worker (background.js)<br/>• Lifecycle & Stream Auth<br/>• Tab Audio Routing"]
-        OFF["Offscreen Pipeline (offscreen.js)<br/>• tabCapture MediaStream<br/>• Speaker Audio Pass-Through<br/>• 16kHz Linear16 Downsampler"]
-        OUT["Standalone Window (output.html / js)<br/>• Dual-Pane Split Feeds<br/>• Pipeline Settings Modal"]
+        CS["Content Script: content.js<br/>• Draggable & Resizable HUD<br/>• Live Chat Scraper<br/>• Bidirectional Highlight"]
+        BG["Background Worker: background.js<br/>• Lifecycle & Stream Auth<br/>• Tab Audio Routing"]
+        OFF["Offscreen Pipeline: offscreen.js<br/>• tabCapture MediaStream<br/>• Speaker Audio Pass-Through<br/>• 16kHz Linear16 Downsampler"]
+        OUT["Standalone Window: output.html<br/>• Dual-Pane Split Feeds<br/>• Pipeline Settings Modal"]
         
         YT -->|Audio Stream| BG
         YT -->|DOM Live Chat| CS
         BG -->|Authorize Stream ID| OFF
         OFF -->|Audio Playback| SPK["Local Speakers"]
-        CS <-->|Relay Transcripts / Chat| BG
-        OUT <-->|Relay Transcripts / Chat| BG
+        CS <-->|Transcripts & Chat| BG
+        OUT <-->|Transcripts & Chat| BG
     end
 
-    subgraph Backend ["Python FastAPI Backend (main.py)"]
-        WS["WebSocket Server (/listen)"]
+    subgraph Backend ["Python FastAPI Backend"]
+        WS["WebSocket Server: /listen"]
         KB[("VTuber Knowledge Base<br/>2,000+ Records<br/>vtubers.json / offices.json")]
         BUF["Sentence Buffer & Flush Controller<br/>• Punctuation Regex<br/>• Min-Char Threshold<br/>• Delayed Flush Runner"]
         LOOK["2-Sentence Lookahead Engine<br/>• Lookahead Timeout<br/>• Dynamic 1 vs 2 Sentence Consumption"]
@@ -107,14 +107,14 @@ flowchart TD
     end
 
     subgraph Cloud ["External AI Services"]
-        DG["Deepgram Nova-3 API<br/>(Live Streaming ja STT)"]
-        GEMINI["Google Gemini API<br/>(gemini-3.5-flash-lite / Pro)<br/>Structured JSON Schema"]
+        DG["Deepgram Nova-3 API<br/>Live Streaming ja STT"]
+        GEMINI["Google Gemini API<br/>gemini-3.5-flash-lite / Pro<br/>Structured JSON Schema"]
     end
 
-    OFF -->|Binary PCM Audio (16kHz)| WS
+    OFF -->|16kHz Binary PCM Audio| WS
     WS <-->|Bidirectional Stream| DG
-    LOOK -->|Lore + Chat Context + Lookahead| GEMINI
-    GEMINI -->|Structured Translation + Summary| LOOK
+    LOOK -->|Lore, Chat & Lookahead| GEMINI
+    GEMINI -->|Translation & Summary| LOOK
     LOOK -->|JSON Translation Payloads| WS
     WS -->|WebSocket Payloads| OFF
     OFF -->|Relay to Frontends| BG
