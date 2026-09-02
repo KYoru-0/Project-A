@@ -91,7 +91,7 @@ function isWatchUrl(urlStr) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 1. Forward transcripts/translations/status from offscreen to content script + extension pages
-    if (message.type && ['transcript', 'translation', 'capture_status', 'error', 'status'].includes(message.type)) {
+    if (message.type && ['transcript', 'translation', 'translating', 'capture_status', 'error', 'status'].includes(message.type)) {
         if (message._relayed) return;
         const isFromOffscreen = sender.url && sender.url.includes('offscreen.html');
         const isFromExtPage = sender.url && sender.url.includes('chrome-extension://') && !sender.tab;

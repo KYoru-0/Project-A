@@ -29,7 +29,7 @@ import uvicorn
 import websockets
 
 # ==============================================================================
-# Environment & Configuration
+# Environment & Configuration Settings
 # ==============================================================================
 
 base_dir = Path(__file__).resolve().parent
@@ -47,12 +47,50 @@ for env_path in env_candidate_paths:
 else:
     load_dotenv()
 
+# --- Customizable Parameters & Settings ---
+
+# 1. Server Network Settings
+SERVER_HOST: str = "127.0.0.1"
+SERVER_PORT: int = 8000
+
+# 2. Gemini AI Translation Parameters
+DEBUG_MOCK_TRANSLATION: bool = False  # Temporary debug mock: returns '<translation>' instead of calling Gemini
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+GEMINI_TEMPERATURE: float = 0.3
+GEMINI_MAX_OUTPUT_TOKENS: int = 800
+CHAT_CONTEXT_COUNT: int = 20  # Number of recent live chat messages to pass to Gemini
+CONTEXT_HISTORY_MAX: int = 50  # Maximum translated sentences retained for context memory
+SUMMARY_MAX_WORDS: int = 500  # Maximum target word count for running stream summary
+
+# 3. Sentence Buffering & Punctuation Flushing
+BUFFER_MIN_CHARS_THRESHOLD: int = 30  # Min character threshold before watching for punctuation
+BUFFER_FLUSH_DELAY_SECONDS: float = 3.0  # Delay in seconds before auto-flushing completed sentences
+PUNCTUATION_PATTERN: re.Pattern = re.compile(r"[.?!。！？…\n|।؟]")
+
+# 4. Translation Lookahead Buffer
+TRANSLATION_LOOKAHEAD_TIMEOUT_SECONDS: float = 3.0  # Lookahead wait timeout for 2nd sentence
+
+# 5. Deepgram Speech-to-Text Parameters
+DEEPGRAM_MODEL: str = "nova-3"
+DEEPGRAM_DEFAULT_LANGUAGE: str = "ja"
+DEEPGRAM_SMART_FORMAT: str = "true"
+DEEPGRAM_ENCODING: str = "linear16"
+DEEPGRAM_SAMPLE_RATE: str = "16000"
+DEEPGRAM_CHANNELS: str = "1"
+DEEPGRAM_ENDPOINTING_MS: str = "300"
+DEEPGRAM_UTTERANCE_END_MS: str = "1000"
+DEEPGRAM_VAD_EVENTS: str = "true"
+DEEPGRAM_KEEPALIVE_INTERVAL_SECONDS: float = 5.0
+
+# 6. In-Memory Session Cache Limits
+LIVE_CHAT_BUFFER_MAX: int = 40  # Maximum live chat items stored per session
+
+# --- API Keys & Clients ---
 deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
 if not deepgram_api_key:
     raise ValueError("DEEPGRAM_API_KEY environment variable is not set.")
 
 gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 app = FastAPI(title="Project KOTOBA Backend - Live STT & Translation")
 app.add_middleware(
@@ -182,7 +220,7 @@ class TranslationResponse(BaseModel):
     sentences: int = Field(description="Number of Japanese sentences consumed (1 or 2).")
     relevant_comment: int = Field(
         default=0,
-        description="1-based index (1-20) of the chat comment the speaker is responding to, or 0 if none.",
+        description=f"1-based index (1-{CHAT_CONTEXT_COUNT}) of the chat comment the speaker is responding to, or 0 if none.",
     )
     relevant_comment_translation: str | None = Field(
         default=None,
@@ -190,11 +228,8 @@ class TranslationResponse(BaseModel):
     )
     summary: str | None = Field(
         default=None,
-        description="Concise running summary of the current conversation/stream topic and context so far, maximum 500 words.",
+        description=f"Concise running summary of the current conversation/stream topic and context so far, maximum {SUMMARY_MAX_WORDS} words.",
     )
-
-
-PUNCTUATION_PATTERN = re.compile(r"[.?!。！？…\n|।؟]")
 
 
 def extract_sentences_and_remainder(text: str, min_length: int = 0) -> tuple[list[str], str]:
@@ -232,14 +267,14 @@ def split_sentences(text: str) -> list[str]:
 # Gemini Translation Pipeline
 # ==============================================================================
 
-TRANSLATION_SYSTEM_PROMPT = """You are a real-time translator specializing in Japanese live streams, VTubers, gaming, and internet culture.
+TRANSLATION_SYSTEM_PROMPT = f"""You are a real-time translator specializing in Japanese live streams, VTubers, gaming, and internet culture.
 Your goal is to translate Japanese spoken stream speech into clear, natural, and expressive English subtitles.
 
 Guidelines:
 1. Preserve conversational tone, emotions, humor, colloquialisms, and stream slang.
 2. The original text might be incomplete or malformed due to real-time speech recognition; translate based on natural spoken intent and phonetics.
 3. You will receive:
-   - "Recent Live Stream Chat": Numbered list (1 to 20) of viewer comments the speaker may be reacting or replying to.
+   - "Recent Live Stream Chat": Numbered list (1 to {CHAT_CONTEXT_COUNT}) of viewer comments the speaker may be reacting or replying to.
    - "Running Stream Context Summary": Summary of the stream/conversation topic up to this point.
    - "Sentence 1 (Target Japanese)": The primary sentence to translate.
    - "Sentence 2 (Lookahead Japanese)": The immediate next sentence spoken, provided as forward context.
@@ -247,11 +282,11 @@ Guidelines:
    - If Sentence 1 is a standalone thought, translate ONLY Sentence 1 and return `sentences: 1`.
    - If Sentence 1 and Sentence 2 form a single cohesive thought that MUST be translated together, translate BOTH and return `sentences: 2`.
 5. Chat Response Attribution:
-   - If the speaker is responding to a specific comment, set `relevant_comment` to its 1-based index (1-20) and provide `relevant_comment_translation`.
+   - If the speaker is responding to a specific comment, set `relevant_comment` to its 1-based index (1-{CHAT_CONTEXT_COUNT}) and provide `relevant_comment_translation`.
    - If speaking independently, set `relevant_comment: 0` and `relevant_comment_translation: null`.
 6. Context Summary:
-   - In `summary`, provide an updated running summary of the current stream context, topic, and storyline so far based on the inputs and previous summary (maximum 500 words, no minimum constraints). Keep it concise, coherent, and informative.
-7. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-20), "relevant_comment_translation", "summary"."""
+   - In `summary`, provide an updated running summary of the current stream context, topic, and storyline so far based on the inputs and previous summary (maximum {SUMMARY_MAX_WORDS} words, no minimum constraints). Keep it concise, coherent, and informative.
+7. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-{CHAT_CONTEXT_COUNT}), "relevant_comment_translation", "summary"."""
 
 
 async def translate_japanese_stream(
@@ -298,7 +333,7 @@ async def translate_japanese_stream(
         lines = "\n".join(
             [
                 f"{i + 1}. [{c.get('author', 'Viewer')}]: {c.get('message', '')}"
-                for i, c in enumerate(recent_chat[-20:])
+                for i, c in enumerate(recent_chat[-CHAT_CONTEXT_COUNT:])
                 if c.get("message")
             ]
         )
@@ -312,6 +347,11 @@ async def translate_japanese_stream(
     if sentence_2:
         prompt_parts.append(f"Sentence 2 (Lookahead Japanese):\n{sentence_2}")
 
+    # Temporary Debug Mock Translation
+    if DEBUG_MOCK_TRANSLATION:
+        print(f">> [DEBUG MOCK] Bypassing Gemini: returning '<translation>' for '{sentence_1}'", flush=True)
+        return "<translation>", 1, 0, "", current_summary
+
     try:
         response = await gemini_client.aio.models.generate_content(
             model=GEMINI_MODEL,
@@ -320,8 +360,8 @@ async def translate_japanese_stream(
                 system_instruction=TRANSLATION_SYSTEM_PROMPT,
                 response_mime_type="application/json",
                 response_schema=TranslationResponse,
-                temperature=0.3,
-                max_output_tokens=800,
+                temperature=GEMINI_TEMPERATURE,
+                max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
             ),
         )
         if response and response.text:
@@ -334,7 +374,7 @@ async def translate_japanese_stream(
                 count = 1
             rel = data.get("relevant_comment", 0)
             rel_trans = str(data.get("relevant_comment_translation") or "").strip()
-            rel_idx = rel if isinstance(rel, int) and 1 <= rel <= 20 else 0
+            rel_idx = rel if isinstance(rel, int) and 1 <= rel <= CHAT_CONTEXT_COUNT else 0
             summary = str(data.get("summary") or "").strip()
             return trans, count, rel_idx, rel_trans, summary
     except Exception as e:
@@ -433,17 +473,17 @@ async def listen(
         pass
 
     dg_params = {
-        "model": "nova-3",
+        "model": DEEPGRAM_MODEL,
         "language": req_lang,
         "punctuate": "true",
         "interim_results": "true",
-        "smart_format": "true",
-        "encoding": "linear16",
-        "sample_rate": "16000",
-        "channels": "1",
-        "endpointing": "300",
-        "utterance_end_ms": "1000",
-        "vad_events": "true",
+        "smart_format": DEEPGRAM_SMART_FORMAT,
+        "encoding": DEEPGRAM_ENCODING,
+        "sample_rate": DEEPGRAM_SAMPLE_RATE,
+        "channels": DEEPGRAM_CHANNELS,
+        "endpointing": DEEPGRAM_ENDPOINTING_MS,
+        "utterance_end_ms": DEEPGRAM_UTTERANCE_END_MS,
+        "vad_events": DEEPGRAM_VAD_EVENTS,
     }
     dg_url = f"wss://api.deepgram.com/v1/listen?{urllib.parse.urlencode(dg_params)}"
 
@@ -477,15 +517,15 @@ async def listen(
                                     if not item.get("id"):
                                         item["id"] = f"chat_{int(time.time() * 1000)}_{uuid.uuid4().hex[:4]}"
                                     live_chat_buffer.append(item)
-                                    if len(live_chat_buffer) > 40:
-                                        del live_chat_buffer[:-40]
+                                    if len(live_chat_buffer) > LIVE_CHAT_BUFFER_MAX:
+                                        del live_chat_buffer[:-LIVE_CHAT_BUFFER_MAX]
                                 elif payload.get("type") == "chat_batch" and "messages" in payload:
                                     for item in payload["messages"]:
                                         if not item.get("id"):
                                             item["id"] = f"chat_{int(time.time() * 1000)}_{uuid.uuid4().hex[:4]}"
                                         live_chat_buffer.append(item)
-                                    if len(live_chat_buffer) > 40:
-                                        del live_chat_buffer[:-40]
+                                    if len(live_chat_buffer) > LIVE_CHAT_BUFFER_MAX:
+                                        del live_chat_buffer[:-LIVE_CHAT_BUFFER_MAX]
                             except Exception:
                                 pass
                 except (WebSocketDisconnect, asyncio.CancelledError):
@@ -519,7 +559,7 @@ async def listen(
                         })
                     except Exception:
                         pass
-                    sentence_buffer.append({"id": s_id, "text": s, "time": ts})
+                    sentence_buffer.append({"id": s_id, "text": s, "time": ts, "speech_final": is_speech_final})
                     if sentence_buffer:
                         buffer_event.set()
 
@@ -544,7 +584,7 @@ async def listen(
 
                 async def delayed_flush_runner() -> None:
                     try:
-                        await asyncio.sleep(3.0)
+                        await asyncio.sleep(BUFFER_FLUSH_DELAY_SECONDS)
                         await flush_completed_sentences(is_speech_final=False)
                         check_and_schedule_flush()
                     except asyncio.CancelledError:
@@ -555,8 +595,8 @@ async def listen(
 
                 def check_and_schedule_flush() -> None:
                     nonlocal flush_timer_task
-                    # When remainder reaches 30 chars AND has at least 1 completed sentence
-                    if len(pending_buffer) >= 30:
+                    # When remainder reaches threshold AND has at least 1 completed sentence
+                    if len(pending_buffer) >= BUFFER_MIN_CHARS_THRESHOLD:
                         test_completed, _ = extract_sentences_and_remainder(pending_buffer, min_length=0)
                         if len(test_completed) >= 1:
                             if flush_timer_task is None or flush_timer_task.done():
@@ -645,13 +685,17 @@ async def listen(
                             buffer_event.clear()
                             await buffer_event.wait()
 
-                        # If only 1 sentence is in the buffer, wait up to 3 seconds for a lookahead sentence before flushing
-                        if len(sentence_buffer) < 2:
+                        # If only 1 sentence is in the buffer and timeout is set, wait for lookahead or next sentence
+                        if len(sentence_buffer) < 2 and TRANSLATION_LOOKAHEAD_TIMEOUT_SECONDS > 0:
                             buffer_event.clear()
-                            try:
-                                await asyncio.wait_for(buffer_event.wait(), timeout=3.0)
-                            except asyncio.TimeoutError:
-                                pass
+                            if len(sentence_buffer) < 2:
+                                try:
+                                    await asyncio.wait_for(
+                                        buffer_event.wait(),
+                                        timeout=TRANSLATION_LOOKAHEAD_TIMEOUT_SECONDS,
+                                    )
+                                except asyncio.TimeoutError:
+                                    pass
 
                         if not sentence_buffer:
                             continue
@@ -660,13 +704,27 @@ async def listen(
                         s2_text = sentence_buffer[1]["text"] if len(sentence_buffer) > 1 else ""
 
                         ctx = list(context_history)
-                        chat = list(live_chat_buffer[-20:])
+                        chat = list(live_chat_buffer[-CHAT_CONTEXT_COUNT:])
+
+                        # Broadcast target sentence indicator to frontend
+                        ts_now = datetime.now().strftime("%H:%M:%S")
+                        lookahead_info = f" | Lookahead: {s2_text}" if s2_text else ""
+                        print(f">> [Target Sentence] ({ts_now}): {s1['text']}{lookahead_info}", flush=True)
+                        try:
+                            await websocket.send_json({
+                                "type": "translating",
+                                "id": s1.get("id"),
+                                "text": s1.get("text"),
+                                "time": ts_now,
+                            })
+                        except Exception:
+                            pass
 
                         if not gemini_client:
                             del sentence_buffer[0]
                             context_history.append(s1["text"])
-                            if len(context_history) > 50:
-                                del context_history[:-50]
+                            if len(context_history) > CONTEXT_HISTORY_MAX:
+                                del context_history[:-CONTEXT_HISTORY_MAX]
                             continue
 
                         trans, consumed, rel_idx, rel_trans, summary_text = await translate_japanese_stream(
@@ -699,8 +757,8 @@ async def listen(
 
                         for it in items:
                             context_history.append(it["text"])
-                        if len(context_history) > 50:
-                            del context_history[:-50]
+                        if len(context_history) > CONTEXT_HISTORY_MAX:
+                            del context_history[:-CONTEXT_HISTORY_MAX]
 
                         if trans:
                             original = " ".join([it["text"] for it in items])
@@ -730,7 +788,7 @@ async def listen(
             async def keep_alive() -> None:
                 try:
                     while True:
-                        await asyncio.sleep(5)
+                        await asyncio.sleep(DEEPGRAM_KEEPALIVE_INTERVAL_SECONDS)
                         await dg_ws.send(json.dumps({"type": "KeepAlive"}))
                 except (asyncio.CancelledError, websockets.ConnectionClosed):
                     pass
@@ -763,8 +821,8 @@ async def listen(
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",
-        port=8000,
+        host=SERVER_HOST,
+        port=SERVER_PORT,
         reload=True,
         reload_dirs=[str(Path(__file__).parent)],
         app_dir=str(Path(__file__).parent),

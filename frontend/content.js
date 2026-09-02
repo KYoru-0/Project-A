@@ -1321,8 +1321,18 @@
                     if (transcriptsScroll) transcriptsScroll.scrollTop = transcriptsScroll.scrollHeight;
                 }
             }
+        } else if (message.type === 'translating') {
+            if (!shadowRoot) createKotobaOverlayDOM();
+            if (shadowRoot && message.id) {
+                shadowRoot.querySelectorAll('.kotoba-transcript-line.is-target').forEach(el => el.classList.remove('is-target'));
+                const targetEl = shadowRoot.querySelector(`.kotoba-transcript-line[data-id="${message.id}"]`);
+                if (targetEl) targetEl.classList.add('is-target');
+            }
         } else if (message.type === 'translation') {
             if (!shadowRoot) createKotobaOverlayDOM();
+            if (shadowRoot) {
+                shadowRoot.querySelectorAll('.kotoba-transcript-line.is-target').forEach(el => el.classList.remove('is-target'));
+            }
             const batchItem = {
                 id: message.id || `trans_${Date.now()}`,
                 ids: message.ids || (message.id ? [message.id] : []),
