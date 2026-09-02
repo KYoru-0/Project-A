@@ -1,0 +1,799 @@
+/* ==========================================================================
+   Project KOTOBA - KYoru Theme (Black, White, Yellow)
+   ========================================================================== */
+
+:host, :root, .kotoba-wrapper {
+    all: initial;
+
+    /* Typography */
+    --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Palette: Black, White, Yellow */
+    --color-black: #000000;
+    --color-white: #ffffff;
+    --color-yellow: #facc15;
+    --color-yellow-light: #fde047;
+    --color-yellow-dark: #ca8a04;
+
+    /* Text Colors */
+    --text-main: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --text-accent: #facc15;
+    --text-highlight: #facc15;
+    --text-highlight-time: #fde047;
+    --text-interim: #facc15;
+
+    /* Backgrounds */
+    --bg-overlay: #000000;
+    --bg-header: #0d0d10;
+    --bg-pane: #08080a;
+    --bg-bubble: #101014;
+    --bg-bubble-hover: #1c1c22;
+    --bg-select: #09090b;
+    --bg-tooltip: #09090b;
+    --bg-toast: #18181b;
+    --bg-line-hover: rgba(255, 255, 255, 0.06);
+
+    /* Borders */
+    --border-main: rgba(250, 204, 21, 0.30);
+    --border-subtle: rgba(255, 255, 255, 0.10);
+    --border-highlight: rgba(250, 204, 21, 0.50);
+    --border-highlight-hover: rgba(250, 204, 21, 0.85);
+    --border-toast: rgba(250, 204, 21, 0.35);
+
+    /* Brand & Buttons */
+    --primary: #facc15;
+    --primary-gradient: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+    --primary-gradient-hover: linear-gradient(135deg, #fde047 0%, #ca8a04 100%);
+    --btn-primary: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+    --btn-primary-text: #000000;
+    --btn-primary-hover: linear-gradient(135deg, #fde047 0%, #ca8a04 100%);
+    --btn-warning: linear-gradient(135deg, #d97706, #f59e0b);
+    --btn-warning-hover: linear-gradient(135deg, #b45309, #d97706);
+    --btn-danger: linear-gradient(135deg, #dc2626, #ef4444);
+    --btn-danger-hover: linear-gradient(135deg, #b91c1c, #dc2626);
+    --logo-gradient: linear-gradient(135deg, #ffffff 20%, #facc15 100%);
+
+    /* Status & Feedback */
+    --status-live: #ef4444;
+    --status-live-bg: rgba(239, 68, 68, 0.20);
+    --status-live-border: rgba(239, 68, 68, 0.45);
+    --status-playback: #facc15;
+    --status-playback-bg: rgba(250, 204, 21, 0.15);
+    --status-playback-border: rgba(250, 204, 21, 0.40);
+    --status-ready: #facc15;
+    --status-unauth: #71717a;
+
+    /* Active Highlight Line */
+    --active-line-border: #ffffff;
+    --active-line-bg: rgba(255, 255, 255, 0.06);
+
+    /* Z-Index Layers */
+    --z-trigger: 2147483646;
+    --z-overlay: 2147483647;
+
+    font-family: var(--font-main);
+}
+
+/* ==================== Trigger Button ==================== */
+
+#kotoba-trigger-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: var(--z-trigger);
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: #09090b;
+    color: #ffffff;
+    border: 1px solid var(--border-highlight);
+    border-radius: 24px;
+    padding: 10px 18px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(250, 204, 21, 0.2);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+}
+
+#kotoba-trigger-btn:hover {
+    transform: translateY(-2px) scale(1.04);
+    border-color: var(--color-yellow);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7), 0 0 20px rgba(250, 204, 21, 0.35);
+}
+
+#kotoba-trigger-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+#kotoba-trigger-btn.unauthorized {
+    background: #121216;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #a1a1aa;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+#kotoba-trigger-btn.unauthorized .kotoba-btn-pulse {
+    background-color: var(--status-unauth);
+    box-shadow: 0 0 6px var(--status-unauth);
+}
+
+#kotoba-trigger-btn.unauthorized:hover {
+    transform: translateY(-1px);
+    background: #18181b;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+
+.kotoba-btn-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--status-ready);
+    box-shadow: 0 0 8px var(--status-ready);
+    display: inline-block;
+}
+
+.kotoba-btn-pulse.recording {
+    background-color: var(--status-live);
+    box-shadow: 0 0 10px var(--status-live);
+    animation: kotobaPulse 1.2s infinite;
+}
+
+@keyframes kotobaPulse {
+    0% { transform: scale(0.95); opacity: 0.8; }
+    50% { transform: scale(1.3); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+/* ==================== Overlay Panel ==================== */
+
+#kotoba-overlay-panel {
+    position: fixed;
+    bottom: 74px;
+    right: 24px;
+    width: 620px;
+    height: 390px;
+    max-width: calc(100vw - 48px);
+    max-height: calc(100vh - 96px);
+    z-index: var(--z-overlay);
+    display: none;
+    flex-direction: column;
+    background: #000000;
+    border: 1px solid var(--border-main);
+    border-radius: 12px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85), 0 0 24px rgba(250, 204, 21, 0.12);
+    overflow: visible;
+    color: var(--text-main);
+    animation: kotobaFadeIn 0.2s ease-out;
+}
+
+@keyframes kotobaFadeIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ==================== Live Chat Bubble Queue ==================== */
+
+.kotoba-bubble-queue {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 4px;
+    right: 4px;
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: flex-start;
+    align-items: flex-end;
+    gap: 6px;
+    pointer-events: none;
+    overflow: hidden;
+    padding: 2px;
+    height: 34px;
+    z-index: var(--z-overlay);
+}
+
+.kotoba-chat-bubble {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-bubble);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-highlight);
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: kotobaBubblePop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    flex-shrink: 0;
+    pointer-events: auto;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.kotoba-chat-bubble:hover {
+    border-color: var(--border-highlight-hover);
+    background: var(--bg-bubble-hover);
+}
+
+.kotoba-bubble-author {
+    font-weight: 700;
+    color: var(--text-accent);
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.kotoba-bubble-text {
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+}
+
+@keyframes kotobaBubblePop {
+    0% { opacity: 0; transform: scale(0.8) translateY(8px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ==================== Header ==================== */
+
+.kotoba-header {
+    background: var(--bg-header);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 12px 12px 0 0;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    user-select: none;
+    cursor: grab;
+}
+
+.kotoba-header:active { cursor: grabbing; }
+.kotoba-header-left, .kotoba-header-info { cursor: grab; }
+.kotoba-header-actions button { cursor: pointer; }
+
+.kotoba-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.kotoba-logo-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    background: var(--logo-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    flex-shrink: 0;
+}
+
+.kotoba-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.kotoba-header-top-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kotoba-badge-status {
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.kotoba-badge-status.live {
+    background: var(--status-live-bg);
+    border: 1px solid var(--status-live-border);
+    color: #f87171;
+}
+
+.kotoba-badge-status.live::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background-color: var(--status-live);
+    box-shadow: 0 0 5px var(--status-live);
+    animation: kotobaPulse 1s infinite;
+}
+
+.kotoba-badge-status.playback {
+    background: var(--status-playback-bg);
+    border: 1px solid var(--status-playback-border);
+    color: var(--status-playback);
+}
+
+.kotoba-badge-status.playback::before {
+    content: '○';
+    font-size: 7px;
+    color: var(--color-yellow);
+    opacity: 0.9;
+}
+
+.kotoba-channel-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kotoba-video-title {
+    font-size: 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.kotoba-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.kotoba-icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.kotoba-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+}
+
+.kotoba-icon-btn.close:hover {
+    background: var(--status-live-bg);
+    color: #f87171;
+}
+
+/* ==================== Controls Bar ==================== */
+
+.kotoba-controls-bar {
+    padding: 4px 10px;
+    background: rgba(10, 10, 12, 0.90);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+}
+
+.kotoba-controls-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kotoba-select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
+    padding: 3px 6px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 500;
+    outline: none;
+    cursor: pointer;
+}
+
+.kotoba-select option {
+    background: var(--bg-select);
+    color: var(--text-main);
+}
+
+.kotoba-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.kotoba-btn-primary {
+    background: var(--btn-primary);
+    color: var(--btn-primary-text);
+    box-shadow: 0 2px 8px rgba(250, 204, 21, 0.35);
+}
+
+.kotoba-btn-primary:hover {
+    background: var(--btn-primary-hover);
+    box-shadow: 0 4px 12px rgba(250, 204, 21, 0.5);
+}
+
+.kotoba-btn-warning {
+    background: var(--btn-warning);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.35);
+}
+
+.kotoba-btn-warning:hover {
+    background: var(--btn-warning-hover);
+}
+
+.kotoba-btn-danger {
+    background: var(--btn-danger);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
+}
+
+.kotoba-btn-danger:hover {
+    background: var(--btn-danger-hover);
+}
+
+.kotoba-controls-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kotoba-subtle-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 9.5px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.kotoba-subtle-btn:hover {
+    background: rgba(250, 204, 21, 0.15);
+    border-color: var(--border-highlight);
+    color: var(--color-yellow);
+}
+
+#kotoba-clear-btn {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #f87171;
+}
+
+#kotoba-clear-btn:hover {
+    background: rgba(239, 68, 68, 0.22);
+    border-color: rgba(239, 68, 68, 0.60);
+    color: #fca5a5;
+}
+
+/* ==================== Relevant Chat Slot ==================== */
+
+.kotoba-relevant-chat-slot {
+    position: relative;
+    margin: 4px 8px 3px 8px;
+    padding: 5px 9px;
+    background: rgba(10, 10, 14, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.kotoba-relevant-chat-slot.active {
+    background: linear-gradient(135deg, rgba(250, 204, 21, 0.15) 0%, rgba(10, 10, 12, 0.85) 100%);
+    border-color: var(--border-highlight);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 10px rgba(250, 204, 21, 0.15);
+}
+
+.kotoba-relevant-chat-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9.5px;
+}
+
+.kotoba-relevant-chat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.kotoba-relevant-chat-slot.active .kotoba-relevant-chat-badge {
+    background: rgba(250, 204, 21, 0.25);
+    border-color: var(--border-highlight);
+    color: var(--color-yellow);
+}
+
+.kotoba-relevant-chat-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: var(--text-muted);
+    display: inline-block;
+}
+
+.kotoba-relevant-chat-slot.active .kotoba-relevant-chat-dot {
+    background-color: var(--color-yellow);
+    box-shadow: 0 0 6px var(--color-yellow);
+}
+
+.kotoba-relevant-chat-author {
+    font-weight: 700;
+    color: #ffffff;
+    font-size: 9.5px;
+}
+
+.kotoba-relevant-chat-time {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 8.5px;
+}
+
+.kotoba-relevant-chat-msg {
+    font-size: 11px;
+    color: #f4f4f6;
+    line-height: 1.35;
+    font-weight: 500;
+    word-break: break-word;
+    cursor: default;
+}
+
+.kotoba-relevant-chat-placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 10.5px;
+}
+
+.kotoba-chat-tooltip {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 8px;
+    max-width: 92%;
+    background: var(--bg-tooltip);
+    border: 1px solid var(--border-highlight);
+    color: #ffffff;
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 10px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 100;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.kotoba-relevant-chat-slot:hover .kotoba-chat-tooltip.has-original {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ==================== Dual Pane Feeds ==================== */
+
+.kotoba-dual-pane {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border-subtle);
+    min-height: 0;
+    border-radius: 0 0 12px 12px;
+    overflow: hidden;
+}
+
+.kotoba-pane {
+    background: var(--bg-pane);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.kotoba-pane-header {
+    padding: 3px 8px;
+    background: rgba(10, 10, 12, 0.6);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.kotoba-pane-badge {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    color: var(--text-secondary);
+}
+
+.kotoba-feed-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.kotoba-feed-scroll::-webkit-scrollbar {
+    width: 4px;
+}
+
+.kotoba-feed-scroll::-webkit-scrollbar-thumb {
+    background: rgba(250, 204, 21, 0.25);
+    border-radius: 2px;
+}
+
+.kotoba-empty-state {
+    margin: auto;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 10.5px;
+    padding: 12px 6px;
+}
+
+/* ==================== Lines & Interactive Highlights ==================== */
+
+.kotoba-line {
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    transition: all 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.kotoba-line:hover {
+    background: var(--bg-line-hover);
+}
+
+.kotoba-line-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.kotoba-line-text {
+    color: var(--text-main);
+    word-break: break-word;
+    font-size: 13.5px;
+}
+
+.kotoba-line-time {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    opacity: 0;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease;
+}
+
+.kotoba-line:hover .kotoba-line-time {
+    opacity: 1;
+}
+
+/* Current Translation Highlight (White Left Border & Bold Text) */
+.kotoba-line.latest-active {
+    background: var(--active-line-bg) !important;
+    border-left: 3px solid var(--active-line-border) !important;
+}
+
+.kotoba-line.latest-active .kotoba-line-text {
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+.kotoba-line.latest-active .kotoba-line-time {
+    opacity: 0.85 !important;
+    color: #e2e8f0 !important;
+}
+
+/* Hover Sentence Highlight across panes (Yellow text only, preserves border & weight) */
+.kotoba-line.highlight-match .kotoba-line-text {
+    color: var(--text-highlight) !important;
+}
+
+.kotoba-line.highlight-match .kotoba-line-time {
+    opacity: 1 !important;
+    color: var(--text-highlight-time) !important;
+}
+
+/* Live Interim Speech Bubble */
+.kotoba-interim-bubble {
+    padding: 2px 5px;
+    font-size: 10.5px;
+    font-style: italic;
+    color: var(--text-interim);
+    opacity: 0.88;
+    display: none;
+    align-items: baseline;
+    gap: 6px;
+}
+
+/* Toast Notifications */
+.kotoba-toast {
+    position: absolute;
+    top: 48px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    background: var(--bg-toast);
+    border: 1px solid var(--border-toast);
+    color: #ffffff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.kotoba-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}

@@ -1,9 +1,76 @@
 {
   "manifest_version": 3,
-  "name": "A",
-  "version": "0.1",
-  "permissions": ["tabCapture", "offscreen", "storage"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "output.html" },
-  "icons": { "256": "icons/256.png" }
+  "name": "Project KOTOBA",
+  "description": "Real-time audio speech-to-text with Deepgram Nova-3",
+  "version": "1.0",
+  "permissions": [
+    "storage",
+    "tabCapture",
+    "offscreen",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "commands": {
+    "toggle-kotoba": {
+      "suggested_key": {
+        "default": "Alt+K",
+        "mac": "Alt+K"
+      },
+      "description": "Toggle KOTOBA / Activate Tab Capture"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "https://www.youtube.com/*",
+        "https://youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "content.css",
+        "icons/*"
+      ],
+      "matches": [
+        "*://*.youtube.com/*",
+        "https://www.youtube.com/*",
+        "https://youtube.com/*"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Project KOTOBA",
+    "default_icon": {
+      "16": "icons/256.png",
+      "32": "icons/256.png",
+      "48": "icons/256.png",
+      "128": "icons/256.png",
+      "256": "icons/256.png",
+      "512": "icons/512.png"
+    }
+  },
+  "icons": {
+    "16": "icons/256.png",
+    "32": "icons/256.png",
+    "48": "icons/256.png",
+    "128": "icons/256.png",
+    "256": "icons/256.png",
+    "512": "icons/512.png"
+  }
 }

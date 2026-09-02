@@ -1,17 +1,165 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project KOTOBA - Live Speech-to-Text & Translation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="icons/256.png">
     <link rel="stylesheet" href="output.css">
 </head>
 
 <body>
-    <div class="container">
-        <a class="btn bg-green" id="toggle-btn" role="button" tabindex="0" data-state="off">
-            Start
-        </a>
+    <div class="app-container">
+        <!-- Top Bar Header -->
+        <header class="app-header">
+            <div class="brand">
+                <img src="icons/256.png" class="brand-logo" alt="Logo">
+                <div class="brand-info">
+                    <h1 class="brand-title">Project KOTOBA</h1>
+                    <span class="brand-subtitle">Real-Time Stream Speech-to-Text & Translation</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="status-pill" id="status-pill">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span class="status-text" id="status-text">Idle</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Controls Section: Stream Info, Language, Start/Stop & Actions -->
+        <div class="controls-container">
+            <!-- Fixed YouTube / Stream Info Banner for Current Tab -->
+            <div class="yt-info-banner" id="yt-info-banner">
+                <div class="yt-info-loading" id="yt-info-placeholder">
+                    <span class="yt-placeholder-icon">📺</span>
+                    <span class="yt-placeholder-text">Detecting active stream / tab details...</span>
+                </div>
+                <div class="yt-info-content" id="yt-info-content" style="display: none;">
+                    <div class="yt-info-badges">
+                        <span class="yt-badge-status" id="yt-badge-status">LIVE</span>
+                        <span class="yt-channel-name" id="yt-channel-name">Channel Name</span>
+                    </div>
+                    <div class="yt-video-title" id="yt-video-title">Stream / Video Title</div>
+                </div>
+            </div>
+
+            <!-- Start/Stop Buttons + Clear -->
+            <div class="control-row">
+                <div class="action-btn-bar-inline">
+                    <button class="btn btn-primary" id="toggle-btn" data-state="off">
+                        <span class="btn-icon" id="btn-icon">▶</span>
+                        <span class="btn-label" id="btn-label">Start Capture</span>
+                    </button>
+                    <button class="btn btn-secondary" id="force-close-btn" title="Force disconnect and release audio stream">
+                        <span class="btn-icon">⏹</span>
+                        <span class="btn-label">Close Stream</span>
+                    </button>
+                    <button class="icon-btn-action" id="clear-btn" title="Clear Both Feeds">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dual Side-by-Side Split Feed Panels -->
+        <main class="dual-pane-main">
+            <!-- Left Pane: Live Transcription -->
+            <section class="feed-pane" id="pane-transcripts">
+                <div class="pane-header">
+                    <div class="pane-title-group">
+                        <span class="pane-icon">🎙️</span>
+                        <h2 class="pane-title">Live Transcription</h2>
+                    </div>
+                    <div class="pane-header-actions">
+                        <span class="pane-badge" id="transcripts-count-badge">0 sentences</span>
+                        <button class="pane-icon-btn" id="copy-transcripts-btn" title="Copy Japanese Transcripts">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pane-scroll-area" id="transcripts-scroll">
+                    <div class="empty-state" id="transcripts-empty-state">
+                        <div class="empty-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                            </svg>
+                        </div>
+                        <p class="empty-title">Ready for Live Audio</p>
+                        <p class="empty-desc">Choose a tab playing stream audio and click "Start Capture".</p>
+                    </div>
+
+                    <div class="transcript-list" id="transcript-list"></div>
+
+                    <!-- Live Interim Pulse Bubble -->
+                    <div class="live-bubble" id="live-bubble" style="display: none;">
+                        <div class="live-tag">
+                            <span class="live-pulse"></span>
+                            <span>LIVE</span>
+                        </div>
+                        <div class="live-text" id="live-text"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Pane: Live Translation (2-Sentence Batches) -->
+            <section class="feed-pane" id="pane-translation">
+                <div class="pane-header">
+                    <div class="pane-title-group">
+                        <span class="pane-icon">✨</span>
+                        <h2 class="pane-title">Translation (2-Sentence Batches)</h2>
+                    </div>
+                    <div class="pane-header-actions">
+                        <span class="pane-badge highlight" id="translation-count-badge">0 translations</span>
+                        <button class="pane-icon-btn" id="copy-translation-btn" title="Copy English Translations">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pane-scroll-area" id="translation-scroll">
+                    <div class="empty-state" id="translation-empty-state">
+                        <div class="empty-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="2" y1="12" x2="22" y2="12"></line>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                            </svg>
+                        </div>
+                        <p class="empty-title">Ready for Subtitles</p>
+                        <p class="empty-desc">Translated 2-sentence chunks with 10-sentence context memory will appear here.</p>
+                    </div>
+
+                    <div class="transcript-list" id="translation-list"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer Info -->
+        <footer class="app-footer">
+            <span id="char-count">0 items recorded</span>
+            <span class="footer-server">● Server Online</span>
+        </footer>
     </div>
+
+    <!-- Notification Toast -->
+    <div class="toast" id="toast"></div>
 
     <script src="output.js"></script>
 </body>
