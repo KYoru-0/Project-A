@@ -1,4 +1,13 @@
-// Project KOTOBA - YouTube In-Page Floating Overlay
+/**
+ * Project KOTOBA - YouTube In-Page Floating Overlay & Live Chat Scraper
+ *
+ * Responsibilities:
+ * - Injects a draggable, floating dual-feed translation HUD inside YouTube watch pages.
+ * - Extracts live YouTube video metadata, streamer identity, and Lore/Office info.
+ * - Captures live chat events from top frame and embedded live chat iframes.
+ * - Handles interactive bidirectional hover sentence highlighting across feeds.
+ * - Manages persistent per-video transcript & translation history.
+ */
 
 (function () {
     const isTopFrame = window.top === window.self;
@@ -6,36 +15,68 @@
                         window.location.pathname.startsWith('/live_chat_replay') ||
                         window.location.href.includes('live_chat');
 
+    // If running inside YouTube Live Chat iframe, initialize chat scraper and exit
     if (!isTopFrame) {
         if (isChatFrame) initIframeLiveChatScraper();
         return;
     }
 
+    // Guard against multiple top-frame script initializations
     if (window.__kotobaInitialized) return;
     window.__kotobaInitialized = true;
 
-    // ==================== State ====================
+    // =========================================================================
+    // Component State & DOM References
+    // =========================================================================
 
     let shadowRoot = null;
-    let triggerBtn = null, triggerLabel = null, overlayPanel = null, triggerPulse = null, toastEl = null;
-    let statusBadge = null, channelNameEl = null, videoTitleEl = null;
-    let toggleBtn = null, toggleBtnLabel = null, toggleBtnIcon = null, langSelect = null;
-    let clearBtn = null, copyTranscriptsBtn = null, copyTranslationBtn = null, closeBtn = null;
-    let transcriptsFeed = null, translationFeed = null;
-    let transcriptsScroll = null, translationScroll = null;
-    let transcriptsEmpty = null, translationEmpty = null;
-    let transcriptsBadge = null, translationBadge = null;
-    let liveBubble = null, liveText = null, bubbleQueue = null;
-    let relevantChatSlot = null, relevantChatAuthor = null, relevantChatMsg = null;
-    let relevantChatTime = null, relevantChatTooltip = null;
-    let vtuberModal = null, cardAvatarWrap = null, cardAvatarImg = null;
-    let cardNameEl = null, cardOfficeEl = null, cardFactsList = null, cardCloseBtn = null;
-    let cardDescWrap = null, cardDescText = null, cardSeeMoreBtn = null;
-    let channelHoverCard = null, channelHoverAvatar = null;
-    let summaryBtn = null, summaryContentEl = null;
+    let triggerBtn = null;
+    let overlayPanel = null;
+    let toastEl = null;
+    let statusBadge = null;
+    let channelNameEl = null;
+    let videoTitleEl = null;
+    let toggleBtn = null;
+    let toggleBtnLabel = null;
+    let toggleBtnIcon = null;
+    let langSelect = null;
+    let clearBtn = null;
+    let copyTranscriptsBtn = null;
+    let copyTranslationBtn = null;
+    let closeBtn = null;
+    let transcriptsFeed = null;
+    let translationFeed = null;
+    let transcriptsScroll = null;
+    let translationScroll = null;
+    let transcriptsEmpty = null;
+    let translationEmpty = null;
+    let transcriptsBadge = null;
+    let translationBadge = null;
+    let liveBubble = null;
+    let liveText = null;
+    let bubbleQueue = null;
+    let relevantChatSlot = null;
+    let relevantChatAuthor = null;
+    let relevantChatMsg = null;
+    let relevantChatTime = null;
+    let relevantChatTooltip = null;
+    let vtuberModal = null;
+    let cardAvatarWrap = null;
+    let cardAvatarImg = null;
+    let cardNameEl = null;
+    let cardOfficeEl = null;
+    let cardFactsList = null;
+    let cardCloseBtn = null;
+    let cardDescWrap = null;
+    let cardDescText = null;
+    let cardSeeMoreBtn = null;
+    let channelHoverCard = null;
+    let channelHoverAvatar = null;
+    let summaryBtn = null;
+    let summaryContentEl = null;
+
     let currentSummary = "";
     let lastVtuberProfile = null;
-
     let isOverlayOpen = false;
     let isCapturing = false;
     let isBusy = false;
@@ -49,17 +90,23 @@
     let translationItems = [];
     let metaObserver = null;
 
-    // ==================== Utilities ====================
+    // =========================================================================
+    // Formatting & Utility Helpers
+    // =========================================================================
 
     function isWatchPage() {
-        const p = window.location.pathname, s = window.location.search;
+        const p = window.location.pathname;
+        const s = window.location.search;
         return p === '/watch' || p.startsWith('/live') || p.startsWith('/shorts') || s.includes('v=');
     }
 
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                  .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        return str.replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#039;');
     }
 
     function extractChannelAvatar() {
@@ -85,9 +132,11 @@
         if (!raw) return '';
         let s = raw.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean)[0] || '';
         s = s.trim().replace(/\s*•\s*[\d.]+[KMB]?\s*subscribers.*$/i, '').trim();
+
         if (s.length >= 4 && s.length % 2 === 0 && s.slice(0, s.length / 2) === s.slice(s.length / 2)) {
             s = s.slice(0, s.length / 2).trim();
         }
+
         const words = s.split(/\s+/);
         if (words.length >= 2 && words.length % 2 === 0) {
             const halfWords = words.length / 2;
@@ -115,7 +164,9 @@
             if (['live', 'shorts', 'embed', 'v'].includes(parts[0])) return parts[1] || null;
             if (parsed.hostname === 'youtu.be') return parts[0] || null;
             return null;
-        } catch (e) { return null; }
+        } catch (e) {
+            return null;
+        }
     }
 
     let toastTimeout = null;
@@ -130,7 +181,9 @@
         }, 2500);
     }
 
-    // ==================== Metadata ====================
+    // =========================================================================
+    // YouTube DOM Metadata Extraction & VTuber Resolution
+    // =========================================================================
 
     function extractYouTubeMetadata() {
         try {
@@ -149,7 +202,6 @@
 
             let channel = '';
             let channelLink = '';
-            // Primary: get channel name + link from the <a> inside channel-name
             const channelEl = document.querySelector(
                 'ytd-video-owner-renderer ytd-channel-name yt-formatted-string#text a, ' +
                 'ytd-video-owner-renderer ytd-channel-name a, ' +
@@ -164,10 +216,10 @@
                 }
                 const h = channelEl.href || (channelEl.getAttribute && channelEl.getAttribute('href'));
                 if (h && !h.startsWith('javascript:')) {
-                    try { channelLink = new URL(h, window.location.origin).href; } catch(e){ channelLink = h; }
+                    try { channelLink = new URL(h, window.location.origin).href; } catch (e) { channelLink = h; }
                 }
             }
-            // Fallback: get channel link from avatar or other owner links
+
             if (!channelLink) {
                 const linkEl = document.querySelector(
                     'ytd-video-owner-renderer a#avatar, ' +
@@ -180,11 +232,11 @@
                 if (linkEl) {
                     const h = linkEl.href || (linkEl.getAttribute && linkEl.getAttribute('href'));
                     if (h && !h.startsWith('javascript:')) {
-                        try { channelLink = new URL(h, window.location.origin).href; } catch(e) { channelLink = h; }
+                        try { channelLink = new URL(h, window.location.origin).href; } catch (e) { channelLink = h; }
                     }
                 }
             }
-            // Fallback: get channel name from meta tags
+
             if (!channel) {
                 const mn = document.querySelector('meta[name="author"], meta[property="og:video:actor"]');
                 if (mn && (mn.content || mn.getAttribute('content'))) {
@@ -208,7 +260,12 @@
                 channelLink: channelLink || '',
             };
         } catch (e) {
-            return { status: 'PLAYBACK', title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video', channel: 'YouTube Channel', channelLink: '' };
+            return {
+                status: 'PLAYBACK',
+                title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video',
+                channel: 'YouTube Channel',
+                channelLink: ''
+            };
         }
     }
 
@@ -366,7 +423,9 @@
         });
     });
 
-    // ==================== DOM Construction ====================
+    // =========================================================================
+    // Shadow DOM Construction & UI Binding
+    // =========================================================================
 
     function createKotobaOverlayDOM() {
         if (shadowRoot || !document.body) return;
@@ -549,7 +608,7 @@
         `;
         shadowRoot.appendChild(wrapper);
 
-        // Bind elements
+        // Bind element references
         triggerBtn = shadowRoot.getElementById('kotoba-trigger-btn');
         overlayPanel = shadowRoot.getElementById('kotoba-overlay-panel');
         toastEl = shadowRoot.getElementById('kotoba-toast');
@@ -560,6 +619,7 @@
         toggleBtnLabel = shadowRoot.getElementById('kotoba-btn-label');
         toggleBtnIcon = shadowRoot.getElementById('kotoba-btn-icon');
         langSelect = shadowRoot.getElementById('kotoba-lang-select');
+
         if (langSelect) {
             const savedLang = localStorage.getItem('kotoba_selected_lang');
             if (savedLang) langSelect.value = savedLang;
@@ -567,6 +627,7 @@
                 localStorage.setItem('kotoba_selected_lang', langSelect.value);
             });
         }
+
         clearBtn = shadowRoot.getElementById('kotoba-clear-btn');
         copyTranscriptsBtn = shadowRoot.getElementById('kotoba-copy-transcripts');
         copyTranslationBtn = shadowRoot.getElementById('kotoba-copy-translation');
@@ -588,7 +649,7 @@
         relevantChatTooltip = shadowRoot.getElementById('kotoba-chat-tooltip');
         bubbleQueue = shadowRoot.getElementById('kotoba-bubble-queue');
 
-        // Modal elements
+        // Bind VTuber modal references
         vtuberModal = shadowRoot.getElementById('kotoba-vtuber-modal');
         cardAvatarWrap = shadowRoot.getElementById('kotoba-card-avatar-wrap');
         cardAvatarImg = shadowRoot.getElementById('kotoba-card-avatar-img');
@@ -611,21 +672,32 @@
         setInterval(updateMetadataUI, 3000);
     }
 
-    // ==================== UI Interaction ====================
+    // =========================================================================
+    // Draggable Overlay & UI Interaction
+    // =========================================================================
 
     function makeDraggable(handle, panel) {
         if (!handle || !panel) return;
-        let isDragging = false, startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let initialLeft = 0;
+        let initialTop = 0;
 
         handle.addEventListener('mousedown', (e) => {
             if (e.target.closest('button') || e.target.closest('.kotoba-icon-btn')) return;
             isDragging = true;
-            startX = e.clientX; startY = e.clientY;
+            startX = e.clientX;
+            startY = e.clientY;
             const rect = panel.getBoundingClientRect();
-            initialLeft = rect.left; initialTop = rect.top;
-            panel.style.bottom = 'auto'; panel.style.right = 'auto';
-            panel.style.left = `${initialLeft}px`; panel.style.top = `${initialTop}px`;
-            document.body.style.userSelect = 'none'; handle.style.cursor = 'grabbing';
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            panel.style.bottom = 'auto';
+            panel.style.right = 'auto';
+            panel.style.left = `${initialLeft}px`;
+            panel.style.top = `${initialTop}px`;
+            document.body.style.userSelect = 'none';
+            handle.style.cursor = 'grabbing';
 
             const onMouseMove = (ev) => {
                 if (!isDragging) return;
@@ -633,13 +705,18 @@
                 let newTop = initialTop + ev.clientY - startY;
                 newLeft = Math.min(Math.max(0, newLeft), Math.max(0, window.innerWidth - panel.offsetWidth));
                 newTop = Math.min(Math.max(0, newTop), Math.max(0, window.innerHeight - panel.offsetHeight));
-                panel.style.left = `${newLeft}px`; panel.style.top = `${newTop}px`;
+                panel.style.left = `${newLeft}px`;
+                panel.style.top = `${newTop}px`;
             };
+
             const onMouseUp = () => {
-                isDragging = false; document.body.style.userSelect = ''; handle.style.cursor = 'grab';
+                isDragging = false;
+                document.body.style.userSelect = '';
+                handle.style.cursor = 'grab';
                 window.removeEventListener('mousemove', onMouseMove);
                 window.removeEventListener('mouseup', onMouseUp);
             };
+
             window.addEventListener('mousemove', onMouseMove);
             window.addEventListener('mouseup', onMouseUp);
         });
@@ -700,27 +777,46 @@
 
     function attachEventListeners() {
         triggerBtn.addEventListener('click', () => {
-            if (!isTabAuthorized) { showToast('Press Alt+K (or click toolbar icon) to authorize & open KOTOBA'); return; }
+            if (!isTabAuthorized) {
+                showToast('Press Alt+K (or click toolbar icon) to authorize & open KOTOBA');
+                return;
+            }
             toggleOverlay();
         });
+
         closeBtn.addEventListener('click', () => toggleOverlay(false));
         toggleBtn.addEventListener('click', () => { isCapturing ? stopCapture() : startCapture(); });
 
         copyTranscriptsBtn.addEventListener('click', () => {
-            if (transcriptItems.length === 0) { showToast('No transcripts to copy'); return; }
-            navigator.clipboard.writeText(transcriptItems.map(t => `[${t.time}] ${t.text}`).join('\n')).then(() => showToast('Transcripts copied!'));
+            if (transcriptItems.length === 0) {
+                showToast('No transcripts to copy');
+                return;
+            }
+            navigator.clipboard.writeText(transcriptItems.map(t => `[${t.time}] ${t.text}`).join('\n'))
+                .then(() => showToast('Transcripts copied!'));
         });
+
         copyTranslationBtn.addEventListener('click', () => {
-            if (translationItems.length === 0) { showToast('No translations to copy'); return; }
-            navigator.clipboard.writeText(translationItems.map(t => `[${t.time}] ${t.translation}\n  ↳ Original: ${t.original}`).join('\n\n')).then(() => showToast('Translations copied!'));
+            if (translationItems.length === 0) {
+                showToast('No translations to copy');
+                return;
+            }
+            navigator.clipboard.writeText(translationItems.map(t => `[${t.time}] ${t.translation}\n  ↳ Original: ${t.original}`).join('\n\n'))
+                .then(() => showToast('Translations copied!'));
         });
+
         clearBtn.addEventListener('click', () => {
-            transcriptItems = []; translationItems = [];
-            transcriptsFeed.innerHTML = ''; translationFeed.innerHTML = '';
-            transcriptsEmpty.style.display = 'block'; translationEmpty.style.display = 'block';
-            transcriptsBadge.textContent = '0 lines'; translationBadge.textContent = '0 lines';
+            transcriptItems = [];
+            translationItems = [];
+            transcriptsFeed.innerHTML = '';
+            translationFeed.innerHTML = '';
+            transcriptsEmpty.style.display = 'block';
+            translationEmpty.style.display = 'block';
+            transcriptsBadge.textContent = '0 lines';
+            translationBadge.textContent = '0 lines';
             liveBubble.style.display = 'none';
-            activeRelevantComment = null; consecutiveNegativeCount = 0;
+            activeRelevantComment = null;
+            consecutiveNegativeCount = 0;
             renderRelevantComment(null);
             if (bubbleQueue) bubbleQueue.innerHTML = '';
             showToast('Feed cleared');
@@ -753,12 +849,14 @@
                 if (channelHoverCard) channelHoverCard.style.display = 'none';
             });
         }
+
         if (cardCloseBtn) {
             cardCloseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 closeVtuberCard();
             });
         }
+
         if (cardSeeMoreBtn) {
             cardSeeMoreBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -770,11 +868,13 @@
                 }
             });
         }
+
         if (vtuberModal) {
             vtuberModal.addEventListener('click', (e) => {
                 if (e.target === vtuberModal) closeVtuberCard();
             });
         }
+
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && vtuberModal && vtuberModal.classList.contains('open')) {
                 closeVtuberCard();
@@ -782,7 +882,9 @@
         });
     }
 
-    // ==================== Feed Rendering ====================
+    // =========================================================================
+    // Feed & Chat Queue Rendering
+    // =========================================================================
 
     function addChatBubbleToQueue(chat) {
         if (!shadowRoot) createKotobaOverlayDOM();
@@ -805,11 +907,14 @@
         bubble.appendChild(text);
         bubbleQueue.prepend(bubble);
 
-        while (bubbleQueue.children.length > 5) bubbleQueue.lastElementChild.remove();
+        while (bubbleQueue.children.length > 5) {
+            bubbleQueue.lastElementChild.remove();
+        }
 
         setTimeout(() => {
             if (bubble.parentNode) {
-                bubble.style.opacity = '0'; bubble.style.transform = 'translateY(-4px)';
+                bubble.style.opacity = '0';
+                bubble.style.transform = 'translateY(-4px)';
                 setTimeout(() => { if (bubble.parentNode) bubble.remove(); }, 300);
             }
         }, 6500);
@@ -839,7 +944,10 @@
             if (relevantChatAuthor) relevantChatAuthor.textContent = '';
             if (relevantChatTime) relevantChatTime.textContent = '';
             if (relevantChatMsg) relevantChatMsg.innerHTML = '<span class="kotoba-relevant-chat-placeholder">No active chat topic</span>';
-            if (relevantChatTooltip) { relevantChatTooltip.textContent = ''; relevantChatTooltip.classList.remove('has-original'); }
+            if (relevantChatTooltip) {
+                relevantChatTooltip.textContent = '';
+                relevantChatTooltip.classList.remove('has-original');
+            }
         }
     }
 
@@ -898,7 +1006,7 @@
             shadowRoot.querySelectorAll(`.kotoba-transcript-line[data-id="${tId}"]`).forEach(el => el.classList.add('latest-active'));
         });
 
-        // Hover cross-highlight (yellow text only, preserves border & weight)
+        // Hover cross-highlight across dual split-feeds
         line.addEventListener('mouseenter', () => {
             line.classList.add('highlight-match');
             targetIds.forEach(tId => {
@@ -920,7 +1028,9 @@
         if (translationScroll) translationScroll.scrollTop = translationScroll.scrollHeight;
     }
 
-    // ==================== Capture Control ====================
+    // =========================================================================
+    // Capture Control & Summary Updates
+    // =========================================================================
 
     function setCaptureState(active) {
         isCapturing = active;
@@ -943,8 +1053,11 @@
             const meta = extractYouTubeMetadata();
             const selectedLang = langSelect ? langSelect.value : (localStorage.getItem('kotoba_selected_lang') || 'ja');
             chrome.runtime.sendMessage({
-                action: 'startTabCapture', lang: selectedLang, model: 'nova-3',
-                title: meta.title, channel: resolvedVtuberName || meta.channel,
+                action: 'startTabCapture',
+                lang: selectedLang,
+                model: 'nova-3',
+                title: meta.title,
+                channel: resolvedVtuberName || meta.channel,
                 channelLink: meta.channelLink || '',
                 videoId: currentVideoId || getVideoIdFromUrl(window.location.href)
             }, (res) => {
@@ -982,7 +1095,9 @@
         }
     }
 
-    // ==================== State Persistence ====================
+    // =========================================================================
+    // Video State Persistence & Restoration
+    // =========================================================================
 
     function persistVideoStateDebounced() {
         if (!currentVideoId) return;
@@ -991,10 +1106,14 @@
             if (!currentVideoId) return;
             chrome.storage.local.set({
                 [`kotoba_state_${currentVideoId}`]: {
-                    videoId: currentVideoId, metadata: extractYouTubeMetadata(),
-                    transcriptItems: transcriptItems.slice(-300), translationItems: translationItems.slice(-300),
-                    activeRelevantComment, consecutiveNegativeCount,
-                    summary: currentSummary, updatedAt: Date.now()
+                    videoId: currentVideoId,
+                    metadata: extractYouTubeMetadata(),
+                    transcriptItems: transcriptItems.slice(-300),
+                    translationItems: translationItems.slice(-300),
+                    activeRelevantComment,
+                    consecutiveNegativeCount,
+                    summary: currentSummary,
+                    updatedAt: Date.now()
                 },
                 kotoba_active_video_id: currentVideoId
             });
@@ -1045,8 +1164,11 @@
                 updateSummaryUI(saved.summary || '');
                 renderFullFeedFromState();
             } else {
-                transcriptItems = []; translationItems = [];
-                activeRelevantComment = null; consecutiveNegativeCount = 0; liveChatMessages = [];
+                transcriptItems = [];
+                translationItems = [];
+                activeRelevantComment = null;
+                consecutiveNegativeCount = 0;
+                liveChatMessages = [];
                 updateSummaryUI('');
                 if (transcriptsFeed) transcriptsFeed.innerHTML = '';
                 if (translationFeed) translationFeed.innerHTML = '';
@@ -1065,7 +1187,9 @@
         });
     }
 
-    // ==================== Navigation Watchers ====================
+    // =========================================================================
+    // Navigation & Page URL Watchers
+    // =========================================================================
 
     let lastUrl = window.location.href;
 
@@ -1087,21 +1211,35 @@
             }
         } else {
             if (triggerBtn) triggerBtn.style.display = 'none';
-            if (overlayPanel) { overlayPanel.style.display = 'none'; isOverlayOpen = false; }
+            if (overlayPanel) {
+                overlayPanel.style.display = 'none';
+                isOverlayOpen = false;
+            }
             if (isCapturing) stopCapture();
         }
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { checkPageUrl(); observeYouTubeMetadata(); });
+        document.addEventListener('DOMContentLoaded', () => {
+            checkPageUrl();
+            observeYouTubeMetadata();
+        });
     } else {
         checkPageUrl();
         observeYouTubeMetadata();
     }
 
     document.addEventListener('yt-navigate-start', () => stopCapture());
-    document.addEventListener('yt-navigate-finish', () => { setTimeout(checkPageUrl, 80); scheduleMetadataUpdates(); observeYouTubeMetadata(); });
-    window.addEventListener('popstate', () => { setTimeout(checkPageUrl, 80); scheduleMetadataUpdates(); observeYouTubeMetadata(); });
+    document.addEventListener('yt-navigate-finish', () => {
+        setTimeout(checkPageUrl, 80);
+        scheduleMetadataUpdates();
+        observeYouTubeMetadata();
+    });
+    window.addEventListener('popstate', () => {
+        setTimeout(checkPageUrl, 80);
+        scheduleMetadataUpdates();
+        observeYouTubeMetadata();
+    });
     window.addEventListener('beforeunload', () => stopCapture());
     window.addEventListener('pagehide', () => stopCapture());
 
@@ -1113,7 +1251,9 @@
         }
     }, 250);
 
-    // ==================== Message Listener ====================
+    // =========================================================================
+    // Runtime Message Listener
+    // =========================================================================
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.action === 'toggleOverlay') {
@@ -1131,8 +1271,15 @@
         if (message.type === 'transcript') {
             if (!shadowRoot) createKotobaOverlayDOM();
             if (message.is_final) {
-                if (liveBubble) { liveBubble.style.display = 'none'; if (liveText) liveText.textContent = ''; }
-                const item = { id: message.id || `utt_${Date.now()}`, text: message.transcript, time: message.time || new Date().toLocaleTimeString() };
+                if (liveBubble) {
+                    liveBubble.style.display = 'none';
+                    if (liveText) liveText.textContent = '';
+                }
+                const item = {
+                    id: message.id || `utt_${Date.now()}`,
+                    text: message.transcript,
+                    time: message.time || new Date().toLocaleTimeString()
+                };
                 transcriptItems.push(item);
                 appendTranscriptLine(item);
                 persistVideoStateDebounced();
@@ -1149,7 +1296,8 @@
             const batchItem = {
                 id: message.id || `trans_${Date.now()}`,
                 ids: message.ids || (message.id ? [message.id] : []),
-                original: message.original, translation: message.translation,
+                original: message.original,
+                translation: message.translation,
                 sentences: message.sentences || 1,
                 time: message.time || new Date().toLocaleTimeString()
             };
@@ -1179,7 +1327,10 @@
             }
         } else if (message.type === 'live_chat_event') {
             if (message.batch && Array.isArray(message.batch)) {
-                message.batch.forEach(item => { liveChatMessages.push(item); addChatBubbleToQueue(item); });
+                message.batch.forEach(item => {
+                    liveChatMessages.push(item);
+                    addChatBubbleToQueue(item);
+                });
                 if (liveChatMessages.length > 50) liveChatMessages = liveChatMessages.slice(-50);
             } else if (message.data) {
                 liveChatMessages.push(message.data);
@@ -1198,20 +1349,26 @@
     setupTopFrameChatObserver();
 })();
 
-// ==================== Live Chat Scraper ====================
+// =============================================================================
+// Live Chat DOM Scrapers (Iframe & Top Frame)
+// =============================================================================
 
 function parseSingleChatMessage(node) {
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return null;
     if (node.hasAttribute('data-kotoba-seen')) return null;
 
     const tag = (node.tagName || '').toLowerCase();
-    const isMatch = tag.includes('chat-text-message') || tag.includes('chat-paid-message') ||
-                    tag.includes('chat-membership') || tag.includes('chat-paid-sticker') ||
+    const isMatch = tag.includes('chat-text-message') ||
+                    tag.includes('chat-paid-message') ||
+                    tag.includes('chat-membership') ||
+                    tag.includes('chat-paid-sticker') ||
                     tag.includes('chat-ticker-paid-message');
 
     if (!isMatch && !node.querySelector('#message')) return null;
 
-    const target = isMatch ? node : (node.closest('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer') || node);
+    const target = isMatch
+        ? node
+        : (node.closest('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer') || node);
     target.setAttribute('data-kotoba-seen', 'true');
 
     const authorEl = target.querySelector('#author-name');
@@ -1221,8 +1378,11 @@ function parseSingleChatMessage(node) {
 
     let text = '';
     msgEl.childNodes.forEach(child => {
-        if (child.nodeType === Node.TEXT_NODE) text += child.textContent;
-        else if (child.nodeType === Node.ELEMENT_NODE) text += (child.tagName.toLowerCase() === 'img' && child.alt) ? child.alt : child.textContent;
+        if (child.nodeType === Node.TEXT_NODE) {
+            text += child.textContent;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+            text += (child.tagName.toLowerCase() === 'img' && child.alt) ? child.alt : child.textContent;
+        }
     });
     text = text.trim();
     if (!text) return null;
@@ -1249,7 +1409,10 @@ function scanAndSendChatBatch(root) {
     if (nodes.length === 0) return;
 
     const collected = [];
-    nodes.forEach(node => { const item = parseSingleChatMessage(node); if (item) collected.push(item); });
+    nodes.forEach(node => {
+        const item = parseSingleChatMessage(node);
+        if (item) collected.push(item);
+    });
 
     if (collected.length > 0) {
         const msg = collected.length === 1

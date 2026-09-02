@@ -1,25 +1,17 @@
-import os
+"""Generate curated VTuber facts and lore using Google Gemini."""
+
 import json
-import time
-import re
 from pathlib import Path
-from difflib import SequenceMatcher
+import time
+
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-DATA_ROOT = Path("dataset")
+DATA_ROOT = Path(__file__).resolve().parent.parent / "dataset"
 KB_DIR = DATA_ROOT / "kb"
 
-TAIL_REGEX = re.compile(r'\@.*&')
-
-with open(KB_DIR / "vtubers.json", 'r', encoding='utf-8') as f:
-    data = json.load(f)
-with open(KB_DIR / "offices.json", 'r', encoding='utf-8') as f:
-    offices = json.load(f)
-
 load_dotenv()
-
 client = genai.Client()
 
 vtuber_schema = {
@@ -30,32 +22,36 @@ vtuber_schema = {
             "index": {"type": "INTEGER"},
             "facts": {
                 "type": "ARRAY",
-                "items": {
-                    "type": "STRING"
-                }
+                "items": {"type": "STRING"}
             }
         },
         "required": ["index", "facts"]
     }
 }
 
+target_file = KB_DIR / "vtubers.json"
+with open(target_file, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
 BATCH_SIZE = 3
 for i in range(0, len(data), BATCH_SIZE):
-# for i in range(1):
-    print(f"Processing chunk {i // BATCH_SIZE + 1} ({i} - {i + BATCH_SIZE - 1})")
+    chunk_indices = list(range(i, min(i + BATCH_SIZE, len(data))))
+    print(f"Processing chunk {i // BATCH_SIZE + 1} ({i} - {i + len(chunk_indices) - 1})")
+
     sending_data = [
         {
             "index": idx,
-            "english_name": v['vtuber_names']['english_name'],
-            "kanji_name": v['vtuber_names']['kanji_name'],
-            "channel_link": v['channels'][0]['channel_link'] if v['channels'] else None
+            "english_name": data[idx].get("vtuber_names", {}).get("english_name", ""),
+            "kanji_name": data[idx].get("vtuber_names", {}).get("kanji_name", ""),
+            "channel_link": data[idx]["channels"][0]["channel_link"] if data[idx].get("channels") else None
         }
-        for idx, v in enumerate(data[i:i+BATCH_SIZE], start=i)
-        if not v.get("facts")
+        for idx in chunk_indices
+        if not data[idx].get("facts")
     ]
+
     if not sending_data:
         continue
-        
+
     prompt = f"""
     You will be given a set of data including:
     - index: index number of the item
@@ -79,7 +75,7 @@ for i in range(0, len(data), BATCH_SIZE):
     DATA:
     {sending_data}
     """
-    
+
     while True:
         try:
             response = client.models.generate_content(
@@ -91,16 +87,17 @@ for i in range(0, len(data), BATCH_SIZE):
                 ),
             )
             break
-        except:
+        except Exception as err:
+            print(f"Gemini API rate limit / error: {err}. Retrying in 5s...")
             time.sleep(5)
-    
-    response = json.loads(response.text)
-    
-    for r in response:
-        facts = r.get("facts", None)
-        data[r['index']]['facts'] = facts
+
+    response_items = json.loads(response.text)
+
+    for r in response_items:
+        facts = r.get("facts")
+        data[r["index"]]["facts"] = facts
         if not facts:
-            print(f"Facts not found: {data[r['index']]['vtuber_names']['english_name']}")
-    
-    with open(KB_DIR / "vtubers_fetched_facts.json", 'w', encoding='utf-8') as f:
+            print(f"Facts not found: {data[r['index']].get('vtuber_names', {}).get('english_name', 'Unknown')}")
+
+    with open(KB_DIR / "vtubers_fetched_facts.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)

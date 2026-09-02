@@ -1,6 +1,17 @@
-// Project KOTOBA - Output Page (Popup/Tab UI)
+/**
+ * Project KOTOBA - Output Window Controller
+ *
+ * Standalone popup and tab UI providing:
+ * - Live audio capture controls and language selection.
+ * - Dual split-feed streams: Live Japanese transcripts + English translation batches.
+ * - Tab and YouTube stream metadata extraction.
+ * - VTuber Knowledge Base integration with interactive profile modal.
+ * - Bidirectional hover-linking between translation batches and Japanese source sentences.
+ */
 
-// --- Elements ---
+// =============================================================================
+// DOM Elements & UI Bindings
+// =============================================================================
 
 const toggleBtn = document.getElementById('toggle-btn');
 const btnIcon = document.getElementById('btn-icon');
@@ -10,6 +21,7 @@ const clearBtn = document.getElementById('clear-btn');
 const copyTranscriptsBtn = document.getElementById('copy-transcripts-btn');
 const copyTranslationBtn = document.getElementById('copy-translation-btn');
 const langSelect = document.getElementById('lang-select');
+
 if (langSelect) {
     const savedLang = localStorage.getItem('kotoba_selected_lang');
     if (savedLang) langSelect.value = savedLang;
@@ -32,20 +44,9 @@ const transcriptsEmptyState = document.getElementById('transcripts-empty-state')
 const translationEmptyState = document.getElementById('translation-empty-state');
 const transcriptsCountBadge = document.getElementById('transcripts-count-badge');
 const translationCountBadge = document.getElementById('translation-count-badge');
+
 const summaryBtn = document.getElementById('summary-btn');
 const summaryContentEl = document.getElementById('summary-content');
-let currentSummary = '';
-
-function updateSummaryUI(summaryText) {
-    currentSummary = (summaryText || '').trim();
-    if (summaryContentEl) {
-        if (currentSummary) {
-            summaryContentEl.textContent = currentSummary;
-        } else {
-            summaryContentEl.textContent = 'No summary available yet. Summary will generate as the stream progresses.';
-        }
-    }
-}
 
 const liveBubble = document.getElementById('live-bubble');
 const liveText = document.getElementById('live-text');
@@ -55,7 +56,7 @@ const charCount = document.getElementById('char-count');
 const toast = document.getElementById('toast');
 const footerServer = document.querySelector('.footer-server');
 
-// --- Modal Elements ---
+// VTuber Modal Elements
 const vtuberModal = document.getElementById('vtuber-modal');
 const modalAvatarWrap = document.getElementById('modal-card-avatar-wrap');
 const modalAvatarImg = document.getElementById('modal-card-avatar-img');
@@ -67,26 +68,41 @@ const modalDescWrap = document.getElementById('modal-card-desc-wrap');
 const modalDescText = document.getElementById('modal-card-desc-text');
 const modalSeeMoreBtn = document.getElementById('modal-card-see-more-btn');
 
-// --- State ---
+// =============================================================================
+// Application State
+// =============================================================================
 
 let currentTargetTabId = null;
 let lastTargetTabMeta = null;
 let lastVtuberProfile = null;
+let currentSummary = '';
 let transcriptItems = [];
 let translationItems = [];
 let errorItems = [];
 let isBusy = false;
 let isCapturing = false;
 
-// --- Helpers ---
+// =============================================================================
+// Helper Functions & Utilities
+// =============================================================================
 
+/**
+ * Escapes HTML characters for safe template string insertion.
+ */
 function escapeHtml(str) {
     if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    return str.replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
 }
 
 let toastTimeout = null;
+
+/**
+ * Displays a temporary bottom notification toast.
+ */
 function showToast(message) {
     if (!toast) return;
     toast.textContent = message;
@@ -112,17 +128,33 @@ function updateStats() {
     if (charCount) charCount.textContent = `${transcriptItems.length} transcripts | ${translationItems.length} translations`;
 }
 
+function updateSummaryUI(summaryText) {
+    currentSummary = (summaryText || '').trim();
+    if (summaryContentEl) {
+        if (currentSummary) {
+            summaryContentEl.textContent = currentSummary;
+        } else {
+            summaryContentEl.textContent = 'No summary available yet. Summary will generate as the stream progresses.';
+        }
+    }
+}
+
+/**
+ * Cleans repetitive patterns and metadata from scraped channel names.
+ */
 function cleanChannelName(raw) {
     if (!raw) return '';
     let s = raw.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean)[0] || '';
     s = s.trim();
     s = s.replace(/\s*•\s*[\d.]+[KMB]?\s*subscribers.*$/i, '').trim();
+
     if (s.length >= 4 && s.length % 2 === 0) {
         const half = s.length / 2;
         if (s.slice(0, half) === s.slice(half)) {
             s = s.slice(0, half).trim();
         }
     }
+
     const words = s.split(/\s+/);
     if (words.length >= 2 && words.length % 2 === 0) {
         const halfWords = words.length / 2;
@@ -135,6 +167,10 @@ function cleanChannelName(raw) {
     return s;
 }
 
+// =============================================================================
+// Tab & YouTube Metadata Extractors (Injected via Scripting API)
+// =============================================================================
+
 function inPageMetadataExtractor() {
     try {
         const href = window.location.href || '';
@@ -142,7 +178,13 @@ function inPageMetadataExtractor() {
         const isYT = host.includes('youtube.com');
 
         if (!isYT) {
-            return { isYouTube: false, title: document.title || 'Webpage', channel: host.replace(/^www\./, '') || 'Web', status: 'PLAYBACK', url: href };
+            return {
+                isYouTube: false,
+                title: document.title || 'Webpage',
+                channel: host.replace(/^www\./, '') || 'Web',
+                status: 'PLAYBACK',
+                url: href
+            };
         }
 
         let title = '';
@@ -188,9 +230,10 @@ function inPageMetadataExtractor() {
             }
             const h = channelEl.href || (channelEl.getAttribute && channelEl.getAttribute('href'));
             if (h && !h.startsWith('javascript:')) {
-                try { channelLink = new URL(h, window.location.origin).href; } catch(e){}
+                try { channelLink = new URL(h, window.location.origin).href; } catch (e) {}
             }
         }
+
         if (!channelLink) {
             const linkEl = document.querySelector(
                 'ytd-video-owner-renderer a#avatar, ' +
@@ -203,10 +246,11 @@ function inPageMetadataExtractor() {
             if (linkEl) {
                 const h = linkEl.href || (linkEl.getAttribute && linkEl.getAttribute('href'));
                 if (h && !h.startsWith('javascript:')) {
-                    try { channelLink = new URL(h, window.location.origin).href; } catch(e) { channelLink = h; }
+                    try { channelLink = new URL(h, window.location.origin).href; } catch (e) { channelLink = h; }
                 }
             }
         }
+
         if (!channel) {
             const mn = document.querySelector('meta[name="author"], meta[property="og:video:actor"]');
             if (mn && (mn.content || mn.getAttribute('content'))) {
@@ -232,9 +276,39 @@ function inPageMetadataExtractor() {
             url: href
         };
     } catch (e) {
-        return { isYouTube: true, status: 'PLAYBACK', title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video', channel: 'YouTube Channel', channelLink: '', url: window.location.href };
+        return {
+            isYouTube: true,
+            status: 'PLAYBACK',
+            title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video',
+            channel: 'YouTube Channel',
+            channelLink: '',
+            url: window.location.href
+        };
     }
 }
+
+function inPageAvatarExtractor() {
+    const selectors = [
+        '#owner #avatar img',
+        'ytd-video-owner-renderer #avatar img',
+        '#owner yt-img-shadow img',
+        'ytd-channel-name img',
+        '#avatar img',
+        '#owner img',
+        'img.yt-core-image[src*="yt3.ggpht.com"]'
+    ];
+    for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el && el.src && !el.src.includes('data:image/svg')) {
+            return el.src;
+        }
+    }
+    return '';
+}
+
+// =============================================================================
+// Stream Metadata & VTuber Profile Resolution
+// =============================================================================
 
 async function updateSelectedTabInfo(tabId) {
     if (!tabId || isNaN(tabId)) {
@@ -247,7 +321,10 @@ async function updateSelectedTabInfo(tabId) {
         let meta = null;
 
         try {
-            const results = await chrome.scripting.executeScript({ target: { tabId: Number(tabId) }, func: inPageMetadataExtractor });
+            const results = await chrome.scripting.executeScript({
+                target: { tabId: Number(tabId) },
+                func: inPageMetadataExtractor
+            });
             if (results && results[0] && results[0].result) meta = results[0].result;
         } catch (e) {}
 
@@ -257,7 +334,8 @@ async function updateSelectedTabInfo(tabId) {
                 if (tab) {
                     const isYT = tab.url ? tab.url.includes('youtube.com') : (tab.title ? tab.title.includes('YouTube') : false);
                     meta = {
-                        isYouTube: isYT, status: 'PLAYBACK',
+                        isYouTube: isYT,
+                        status: 'PLAYBACK',
                         title: (tab.title || '').replace(/\s*-\s*YouTube$/, '').trim() || 'Media Playback',
                         channel: isYT ? 'YouTube' : (tab.url ? new URL(tab.url).hostname.replace(/^www\./, '') : 'Webpage'),
                         channelLink: ''
@@ -311,29 +389,35 @@ async function updateSelectedTabInfo(tabId) {
     }
 }
 
-function inPageAvatarExtractor() {
-    const selectors = [
-        '#owner #avatar img',
-        'ytd-video-owner-renderer #avatar img',
-        '#owner yt-img-shadow img',
-        'ytd-channel-name img',
-        '#avatar img',
-        '#owner img',
-        'img.yt-core-image[src*="yt3.ggpht.com"]'
-    ];
-    for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (el && el.src && !el.src.includes('data:image/svg')) {
-            return el.src;
-        }
+async function resolveInitialTargetTab() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabIdParam = urlParams.get('tabId');
+
+    if (tabIdParam && !isNaN(parseInt(tabIdParam))) {
+        currentTargetTabId = parseInt(tabIdParam);
+    } else {
+        try {
+            const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            if (activeTab && activeTab.id && !activeTab.url?.startsWith('chrome-extension://')) {
+                currentTargetTabId = activeTab.id;
+            } else {
+                const tabs = await chrome.tabs.query({ active: true });
+                const nonExt = tabs.find(t => t.url && !t.url.startsWith('chrome-extension://'));
+                if (nonExt) currentTargetTabId = nonExt.id;
+            }
+        } catch (e) {}
     }
-    return '';
+
+    if (currentTargetTabId) await updateSelectedTabInfo(currentTargetTabId);
 }
+
+// =============================================================================
+// VTuber Profile Modal Dialog
+// =============================================================================
 
 async function openVtuberModal() {
     if (!vtuberModal) return;
 
-    // Refresh metadata so channelLink and profile are current
     if (currentTargetTabId) await updateSelectedTabInfo(currentTargetTabId);
 
     let avatarSrc = 'icons/256.png';
@@ -423,29 +507,9 @@ function closeVtuberModal() {
     if (vtuberModal) vtuberModal.classList.remove('open');
 }
 
-async function resolveInitialTargetTab() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tabIdParam = urlParams.get('tabId');
-
-    if (tabIdParam && !isNaN(parseInt(tabIdParam))) {
-        currentTargetTabId = parseInt(tabIdParam);
-    } else {
-        try {
-            const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-            if (activeTab && activeTab.id && !activeTab.url?.startsWith('chrome-extension://')) {
-                currentTargetTabId = activeTab.id;
-            } else {
-                const tabs = await chrome.tabs.query({ active: true });
-                const nonExt = tabs.find(t => t.url && !t.url.startsWith('chrome-extension://'));
-                if (nonExt) currentTargetTabId = nonExt.id;
-            }
-        } catch (e) {}
-    }
-
-    if (currentTargetTabId) await updateSelectedTabInfo(currentTargetTabId);
-}
-
-// --- UI State ---
+// =============================================================================
+// UI State & Capture Status Controls
+// =============================================================================
 
 function updateCaptureUI(active) {
     if (active) {
@@ -463,16 +527,35 @@ function updateCaptureUI(active) {
 
 function updateStatusUI(status) {
     statusPill.className = 'status-pill';
-    if (status === 'connected') { statusPill.classList.add('active'); statusText.textContent = 'Live'; }
-    else if (status === 'connecting') { statusPill.classList.add('connecting'); statusText.textContent = 'Connecting'; }
-    else if (status === 'error') { statusPill.classList.add('error'); statusText.textContent = 'Error'; }
-    else { statusText.textContent = 'Idle'; }
+    if (status === 'connected') {
+        statusPill.classList.add('active');
+        statusText.textContent = 'Live';
+    } else if (status === 'connecting') {
+        statusPill.classList.add('connecting');
+        statusText.textContent = 'Connecting';
+    } else if (status === 'error') {
+        statusPill.classList.add('error');
+        statusText.textContent = 'Error';
+    } else {
+        statusText.textContent = 'Idle';
+    }
 }
 
-// --- Rendering ---
+function stopDirectCapture() {
+    isCapturing = false;
+    isBusy = false;
+    updateCaptureUI(false);
+    updateStatusUI('idle');
+    if (liveBubble) liveBubble.style.display = 'none';
+    chrome.runtime.sendMessage({ action: 'stopTabCapture' }, () => {});
+}
+
+// =============================================================================
+// Feed Rendering & Bidirectional Sentence Cross-Highlighting
+// =============================================================================
 
 function appendLiveTranscriptCard(item, shouldScroll = true) {
-    transcriptsEmptyState.style.display = 'none';
+    if (transcriptsEmptyState) transcriptsEmptyState.style.display = 'none';
     const line = document.createElement('div');
     line.className = 'transcript-line';
     if (item.id) line.dataset.id = item.id;
@@ -492,7 +575,7 @@ function appendLiveTranscriptCard(item, shouldScroll = true) {
 }
 
 function appendTranslationBatchCard(item, shouldScroll = true) {
-    translationEmptyState.style.display = 'none';
+    if (translationEmptyState) translationEmptyState.style.display = 'none';
     const line = document.createElement('div');
     line.className = 'translation-line';
     if (item.id) line.dataset.id = item.id;
@@ -531,6 +614,7 @@ function appendTranslationBatchCard(item, shouldScroll = true) {
             });
         });
     });
+
     line.addEventListener('mouseleave', () => {
         line.classList.remove('highlight-match');
         targetIds.forEach(tId => {
@@ -543,7 +627,7 @@ function appendTranslationBatchCard(item, shouldScroll = true) {
 }
 
 function appendErrorCard(item, shouldScroll = true) {
-    transcriptsEmptyState.style.display = 'none';
+    if (transcriptsEmptyState) transcriptsEmptyState.style.display = 'none';
     const line = document.createElement('div');
     line.className = 'error-line';
     line.innerHTML = `<span class="error-line-badge">ERROR</span><span>${escapeHtml(item.text)}${item.tip ? ' (' + escapeHtml(item.tip) + ')' : ''}</span>`;
@@ -565,17 +649,17 @@ function renderAllPanes() {
     translationList.innerHTML = '';
 
     if (transcriptItems.length === 0 && errorItems.length === 0) {
-        transcriptsEmptyState.style.display = 'flex';
+        if (transcriptsEmptyState) transcriptsEmptyState.style.display = 'flex';
     } else {
-        transcriptsEmptyState.style.display = 'none';
+        if (transcriptsEmptyState) transcriptsEmptyState.style.display = 'none';
         transcriptItems.forEach(item => appendLiveTranscriptCard(item, false));
         errorItems.forEach(item => appendErrorCard(item, false));
     }
 
     if (translationItems.length === 0) {
-        translationEmptyState.style.display = 'flex';
+        if (translationEmptyState) translationEmptyState.style.display = 'flex';
     } else {
-        translationEmptyState.style.display = 'none';
+        if (translationEmptyState) translationEmptyState.style.display = 'none';
         translationItems.forEach(item => appendTranslationBatchCard(item, false));
     }
 
@@ -592,18 +676,9 @@ function renderAllPanes() {
     }, 200);
 }
 
-// --- Capture Control ---
-
-function stopDirectCapture() {
-    isCapturing = false;
-    isBusy = false;
-    updateCaptureUI(false);
-    updateStatusUI('idle');
-    liveBubble.style.display = 'none';
-    chrome.runtime.sendMessage({ action: 'stopTabCapture' }, () => {});
-}
-
-// --- Message Listener ---
+// =============================================================================
+// Extension Message Dispatcher
+// =============================================================================
 
 chrome.runtime.onMessage.addListener(async (message) => {
     if (message.action === 'setTargetTab' && message.tabId) {
@@ -616,8 +691,8 @@ chrome.runtime.onMessage.addListener(async (message) => {
 
     if (message.type === 'transcript') {
         if (message.is_final) {
-            liveBubble.style.display = 'none';
-            liveText.textContent = '';
+            if (liveBubble) liveBubble.style.display = 'none';
+            if (liveText) liveText.textContent = '';
             const item = { id: message.id || `utt_${Date.now()}`, text: message.transcript, time: message.time || new Date().toLocaleTimeString() };
             transcriptItems.push(item);
             appendLiveTranscriptCard(item, true);
@@ -625,15 +700,19 @@ chrome.runtime.onMessage.addListener(async (message) => {
             if (transcriptItems.length > 250) transcriptItems.shift();
             await chrome.storage.local.set({ transcriptItems });
         } else {
-            transcriptsEmptyState.style.display = 'none';
-            liveBubble.style.display = 'flex';
-            liveText.textContent = message.transcript;
-            scrollTranscriptsToBottom();
+            if (transcriptsEmptyState) transcriptsEmptyState.style.display = 'none';
+            if (liveBubble) {
+                liveBubble.style.display = 'flex';
+                if (liveText) liveText.textContent = message.transcript;
+                scrollTranscriptsToBottom();
+            }
         }
     } else if (message.type === 'translation') {
         const batchItem = {
-            id: message.id || `trans_${Date.now()}`, ids: message.ids || [],
-            original: message.original, translation: message.translation,
+            id: message.id || `trans_${Date.now()}`,
+            ids: message.ids || [],
+            original: message.original,
+            translation: message.translation,
             time: message.time || new Date().toLocaleTimeString()
         };
         translationItems.push(batchItem);
@@ -647,11 +726,15 @@ chrome.runtime.onMessage.addListener(async (message) => {
         await chrome.storage.local.set({ translationItems });
     } else if (message.type === 'capture_status') {
         if (message.status === 'started') {
-            isCapturing = true; isBusy = false;
-            updateCaptureUI(true); updateStatusUI('connected');
+            isCapturing = true;
+            isBusy = false;
+            updateCaptureUI(true);
+            updateStatusUI('connected');
         } else {
-            isCapturing = false; isBusy = false;
-            updateCaptureUI(false); updateStatusUI('idle');
+            isCapturing = false;
+            isBusy = false;
+            updateCaptureUI(false);
+            updateStatusUI('idle');
         }
     } else if (message.type === 'error') {
         reportError(`Capture Error: ${message.message}`, 'Backend or recording issue.');
@@ -660,18 +743,141 @@ chrome.runtime.onMessage.addListener(async (message) => {
     }
 });
 
-// --- Init ---
+// =============================================================================
+// Event Handlers & Initialization
+// =============================================================================
 
+toggleBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    if (isBusy) return;
+
+    if (toggleBtn.dataset.state === 'off') {
+        if (!currentTargetTabId) {
+            reportError('No target tab selected.', 'Open your stream tab and click the extension icon on it.');
+            showToast('No target tab');
+            return;
+        }
+        isBusy = true;
+        updateStatusUI('connecting');
+        btnLabel.textContent = 'Connecting...';
+
+        const selectedLang = langSelect ? langSelect.value : (localStorage.getItem('kotoba_selected_lang') || 'ja');
+        chrome.runtime.sendMessage({
+            action: 'startTabCapture',
+            tabId: currentTargetTabId,
+            lang: selectedLang,
+            model: 'nova-3',
+            title: ytVideoTitle ? ytVideoTitle.textContent.trim() : '',
+            channel: ytChannelName ? ytChannelName.textContent.trim() : ''
+        }, (res) => {
+            isBusy = false;
+            if (!res || !res.success) {
+                reportError(`Tab Capture Error: ${res?.error || 'Failed to start'}`, 'Check tab selection.');
+                showToast('Failed to start capture');
+                updateCaptureUI(false);
+                updateStatusUI('error');
+            } else {
+                isCapturing = true;
+                updateCaptureUI(true);
+                updateStatusUI('connected');
+                showToast('Audio capture started');
+            }
+        });
+    } else {
+        stopDirectCapture();
+        showToast('Capture stopped');
+    }
+});
+
+forceCloseBtn.addEventListener('click', () => {
+    stopDirectCapture();
+    showToast('Stream closed & reset');
+});
+
+copyTranscriptsBtn.addEventListener('click', () => {
+    if (transcriptItems.length === 0) {
+        showToast('No transcripts to copy');
+        return;
+    }
+    navigator.clipboard.writeText(transcriptItems.map(t => `[${t.time}] ${t.text}`).join('\n'))
+        .then(() => showToast('Copied transcripts to clipboard!'))
+        .catch(() => showToast('Copy failed'));
+});
+
+copyTranslationBtn.addEventListener('click', () => {
+    if (translationItems.length === 0) {
+        showToast('No translations to copy');
+        return;
+    }
+    navigator.clipboard.writeText(translationItems.map(t => `[${t.time}] ${t.translation}\n  ↳ Original: ${t.original}`).join('\n\n'))
+        .then(() => showToast('Copied translations to clipboard!'))
+        .catch(() => showToast('Copy failed'));
+});
+
+clearBtn.addEventListener('click', async () => {
+    transcriptItems = [];
+    translationItems = [];
+    errorItems = [];
+    await chrome.storage.local.set({ transcriptItems: [], translationItems: [], errorItems: [] });
+    if (liveBubble) liveBubble.style.display = 'none';
+    renderAllPanes();
+    showToast('Cleared all items');
+});
+
+// VTuber Modal Trigger Event Listeners
+if (ytChannelName) {
+    ytChannelName.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openVtuberModal();
+    });
+}
+if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeVtuberModal();
+    });
+}
+if (modalSeeMoreBtn) {
+    modalSeeMoreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!modalDescWrap) return;
+        const isExpanded = modalDescWrap.classList.toggle('expanded');
+        modalSeeMoreBtn.textContent = isExpanded ? 'See less' : 'See more';
+        if (!isExpanded && modalDescText) {
+            modalDescText.scrollTop = 0;
+        }
+    });
+}
+if (vtuberModal) {
+    vtuberModal.addEventListener('click', (e) => {
+        if (e.target === vtuberModal) closeVtuberModal();
+    });
+}
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && vtuberModal && vtuberModal.classList.contains('open')) {
+        closeVtuberModal();
+    }
+});
+
+/**
+ * Initializes state from chrome.storage and verifies backend connectivity.
+ */
 async function init() {
     try { window.focus(); } catch (e) {}
 
     fetch('http://127.0.0.1:8000/')
         .then(res => res.json())
         .then(() => {
-            if (footerServer) { footerServer.textContent = '● Server Online'; footerServer.style.color = '#34d399'; }
+            if (footerServer) {
+                footerServer.textContent = '● Server Online';
+                footerServer.style.color = '#34d399';
+            }
         })
         .catch(() => {
-            if (footerServer) { footerServer.textContent = '○ Server Offline'; footerServer.style.color = '#f87171'; }
+            if (footerServer) {
+                footerServer.textContent = '○ Server Offline';
+                footerServer.style.color = '#f87171';
+            }
         });
 
     try {
@@ -712,104 +918,5 @@ async function init() {
         console.error('Init error:', e);
     }
 }
-
-// --- Event Handlers ---
-
-toggleBtn.addEventListener('click', async (event) => {
-    event.preventDefault();
-    if (isBusy) return;
-
-    if (toggleBtn.dataset.state === 'off') {
-        if (!currentTargetTabId) {
-            reportError('No target tab selected.', 'Open your stream tab and click the extension icon on it.');
-            showToast('No target tab');
-            return;
-        }
-        isBusy = true;
-        updateStatusUI('connecting');
-        btnLabel.textContent = 'Connecting...';
-
-        const selectedLang = langSelect ? langSelect.value : (localStorage.getItem('kotoba_selected_lang') || 'ja');
-        chrome.runtime.sendMessage({
-            action: 'startTabCapture', tabId: currentTargetTabId, lang: selectedLang, model: 'nova-3',
-            title: ytVideoTitle ? ytVideoTitle.textContent.trim() : '',
-            channel: ytChannelName ? ytChannelName.textContent.trim() : ''
-        }, (res) => {
-            isBusy = false;
-            if (!res || !res.success) {
-                reportError(`Tab Capture Error: ${res?.error || 'Failed to start'}`, 'Check tab selection.');
-                showToast('Failed to start capture');
-                updateCaptureUI(false); updateStatusUI('error');
-            } else {
-                isCapturing = true;
-                updateCaptureUI(true); updateStatusUI('connected');
-                showToast('Audio capture started');
-            }
-        });
-    } else {
-        stopDirectCapture();
-        showToast('Capture stopped');
-    }
-});
-
-forceCloseBtn.addEventListener('click', () => {
-    stopDirectCapture();
-    showToast('Stream closed & reset');
-});
-
-copyTranscriptsBtn.addEventListener('click', () => {
-    if (transcriptItems.length === 0) { showToast('No transcripts to copy'); return; }
-    navigator.clipboard.writeText(transcriptItems.map(t => `[${t.time}] ${t.text}`).join('\n'))
-        .then(() => showToast('Copied transcripts to clipboard!')).catch(() => showToast('Copy failed'));
-});
-
-copyTranslationBtn.addEventListener('click', () => {
-    if (translationItems.length === 0) { showToast('No translations to copy'); return; }
-    navigator.clipboard.writeText(translationItems.map(t => `[${t.time}] ${t.translation}\n  ↳ Original: ${t.original}`).join('\n\n'))
-        .then(() => showToast('Copied translations to clipboard!')).catch(() => showToast('Copy failed'));
-});
-
-clearBtn.addEventListener('click', async () => {
-    transcriptItems = []; translationItems = []; errorItems = [];
-    await chrome.storage.local.set({ transcriptItems: [], translationItems: [], errorItems: [] });
-    liveBubble.style.display = 'none';
-    renderAllPanes();
-    showToast('Cleared all items');
-});
-
-// --- VTuber Modal Event Listeners ---
-if (ytChannelName) {
-    ytChannelName.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openVtuberModal();
-    });
-}
-if (modalCloseBtn) {
-    modalCloseBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeVtuberModal();
-    });
-}
-if (modalSeeMoreBtn) {
-    modalSeeMoreBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!modalDescWrap) return;
-        const isExpanded = modalDescWrap.classList.toggle('expanded');
-        modalSeeMoreBtn.textContent = isExpanded ? 'See less' : 'See more';
-        if (!isExpanded && modalDescText) {
-            modalDescText.scrollTop = 0;
-        }
-    });
-}
-if (vtuberModal) {
-    vtuberModal.addEventListener('click', (e) => {
-        if (e.target === vtuberModal) closeVtuberModal();
-    });
-}
-window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && vtuberModal && vtuberModal.classList.contains('open')) {
-        closeVtuberModal();
-    }
-});
 
 init();

@@ -1,25 +1,17 @@
-import os
+"""Fetch canonical English and Kanji names for VTubers using Google Gemini."""
+
 import json
-import time
-import re
 from pathlib import Path
-from difflib import SequenceMatcher
+import time
+
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-DATA_ROOT = Path("dataset")
+DATA_ROOT = Path(__file__).resolve().parent.parent / "dataset"
 KB_DIR = DATA_ROOT / "kb"
 
-TAIL_REGEX = re.compile(r'\@.*&')
-
-with open(KB_DIR / "vtubers_fetched_names.json", 'r', encoding='utf-8') as f:
-    data = json.load(f)
-with open(KB_DIR / "offices.json", 'r', encoding='utf-8') as f:
-    offices = json.load(f)
-
 load_dotenv()
-
 client = genai.Client()
 
 vtuber_schema = {
@@ -29,41 +21,40 @@ vtuber_schema = {
         "properties": {
             "index": {"type": "INTEGER"},
             "english_name": {"type": "STRING"},
-            "kanji_name": {
-                "type": "STRING", 
-                "nullable": True
-            },
-            "hiragana_name": {
-                "type": "STRING", 
-                "nullable": True
-            }
+            "kanji_name": {"type": "STRING", "nullable": True},
+            "hiragana_name": {"type": "STRING", "nullable": True},
         },
-        "required": ["index", "english_name"]
-    }
+        "required": ["index", "english_name"],
+    },
 }
 
-for i in range(0, len(data), 5):
-# for i in range(1):
-    if data[i].get("vtuber_names", None):
+target_file = KB_DIR / "vtubers_fetched_names.json"
+if not target_file.exists():
+    target_file = KB_DIR / "vtubers.json"
+
+with open(target_file, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+BATCH_SIZE = 5
+for i in range(0, len(data), BATCH_SIZE):
+    if data[i].get("vtuber_names"):
         continue
-    chunk = data[i : i + 5]
+
+    chunk = data[i : i + BATCH_SIZE]
     sending_data = []
-    index = i
-    for v in chunk:
-        print(f"Processing {v['rank']}: {v['vtuber_name']}")
-        appeared_name = v['vtuber_name']
-        channel_name = v['channels'][0]['channel_name']
-        channel_link = v['channels'][0]['channel_link']
-        sending_data.append(
-            {
-                "index": index,
-                "appeared_name": appeared_name,
-                "channel_name": channel_name,
-                "channel_link": channel_link
-            }
-        )
-        index += 1
-        
+
+    for index, v in enumerate(chunk, start=i):
+        print(f"Processing #{v['rank']}: {v['vtuber_name']}")
+        appeared_name = v["vtuber_name"]
+        channel_name = v["channels"][0]["channel_name"] if v.get("channels") else ""
+        channel_link = v["channels"][0]["channel_link"] if v.get("channels") else ""
+        sending_data.append({
+            "index": index,
+            "appeared_name": appeared_name,
+            "channel_name": channel_name,
+            "channel_link": channel_link,
+        })
+
     prompt = f"""
     You will be given a set of data including:
     - index: index number of the item
@@ -79,7 +70,7 @@ for i in range(0, len(data), 5):
     DATA:
     {sending_data}
     """
-    
+
     while True:
         try:
             response = client.models.generate_content(
@@ -91,18 +82,16 @@ for i in range(0, len(data), 5):
                 ),
             )
             break
-        except:
+        except Exception as err:
+            print(f"Gemini API rate limit / error: {err}. Retrying in 5s...")
             time.sleep(5)
-    
-    response = json.loads(response.text)
-    
-    for r in response:
-        english_name = r.get("english_name", None)
-        kanji_name = r.get("kanji_name", None)
-        data[r['index']]['vtuber_names'] = {
-            "english_name": english_name,
-            "kanji_name": kanji_name,
+
+    response_items = json.loads(response.text)
+    for r in response_items:
+        data[r["index"]]["vtuber_names"] = {
+            "english_name": r.get("english_name"),
+            "kanji_name": r.get("kanji_name"),
         }
-    
-    with open(KB_DIR / "vtubers_fetched_names.json", 'w', encoding='utf-8') as f:
+
+    with open(KB_DIR / "vtubers_fetched_names.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)

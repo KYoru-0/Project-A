@@ -1,13 +1,29 @@
-// Project KOTOBA - Background Service Worker (Manifest V3)
+/**
+ * Project KOTOBA - Background Service Worker (Manifest V3)
+ *
+ * Responsibilities:
+ * - Coordinates tabCapture authorization and audio stream IDs.
+ * - Spawns and manages the offscreen audio pipeline document.
+ * - Relays transcripts, translations, and live chat events between content scripts,
+ *   extension output windows, and the offscreen pipeline.
+ * - Tracks tab navigation and lifecycle events to clean up active audio sessions.
+ */
 
-// --- State ---
+// =============================================================================
+// State & Tracking
+// =============================================================================
 
 let activeCapturingTabId = null;
 let activeCapturingVideoId = null;
 const authorizedTabs = new Set();
 
-// --- Helpers ---
+// =============================================================================
+// Helper Functions
+// =============================================================================
 
+/**
+ * Ensures an offscreen document is active for capturing tab media and Web Audio processing.
+ */
 async function ensureOffscreenDocument() {
     try {
         if (chrome.offscreen && typeof chrome.offscreen.hasDocument === 'function') {
@@ -36,6 +52,9 @@ async function ensureOffscreenDocument() {
     }
 }
 
+/**
+ * Extracts YouTube video ID from a given URL string across various formats.
+ */
 function getVideoIdFromUrl(urlStr) {
     if (!urlStr) return null;
     try {
@@ -45,21 +64,33 @@ function getVideoIdFromUrl(urlStr) {
         if (['live', 'shorts', 'embed', 'v'].includes(parts[0])) return parts[1] || null;
         if (parsed.hostname === 'youtu.be') return parts[0] || null;
         return null;
-    } catch (e) { return null; }
+    } catch (e) {
+        return null;
+    }
 }
 
+/**
+ * Checks whether a URL corresponds to an active watch/stream page.
+ */
 function isWatchUrl(urlStr) {
     if (!urlStr) return false;
     try {
         const p = new URL(urlStr);
-        return p.pathname === '/watch' || p.pathname.startsWith('/live') || p.pathname.startsWith('/shorts') || p.searchParams.has('v');
-    } catch (e) { return false; }
+        return p.pathname === '/watch' ||
+               p.pathname.startsWith('/live') ||
+               p.pathname.startsWith('/shorts') ||
+               p.searchParams.has('v');
+    } catch (e) {
+        return false;
+    }
 }
 
-// --- Message Handler ---
+// =============================================================================
+// Message Dispatcher & Routing
+// =============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // Forward transcripts/translations/status from offscreen to content script + extension pages
+    // 1. Forward transcripts/translations/status from offscreen to content script + extension pages
     if (message.type && ['transcript', 'translation', 'capture_status', 'error', 'status'].includes(message.type)) {
         if (message._relayed) return;
         const isFromOffscreen = sender.url && sender.url.includes('offscreen.html');
@@ -75,7 +106,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
-    // Forward live chat from content script to offscreen + back to content tab
+    // 2. Forward live chat from content script to offscreen + back to content tab
     if (message.action === 'liveChatCollected') {
         const tabId = sender.tab ? sender.tab.id : activeCapturingTabId;
         chrome.runtime.sendMessage({
@@ -84,6 +115,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             data: message.data,
             batch: message.batch
         }).catch(() => {});
+
         if (tabId) {
             chrome.tabs.sendMessage(tabId, {
                 type: 'live_chat_event',
@@ -94,12 +126,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
-    // Start tab audio capture
+    // 3. Start tab audio capture
     if (message.action === 'startTabCapture') {
         (async () => {
             try {
                 const tabId = sender.tab ? sender.tab.id : message.tabId;
-                if (!tabId) { sendResponse({ success: false, error: 'No target tab found' }); return; }
+                if (!tabId) {
+                    sendResponse({ success: false, error: 'No target tab found' });
+                    return;
+                }
 
                 activeCapturingTabId = tabId;
                 activeCapturingVideoId = message.videoId || getVideoIdFromUrl(sender.tab?.url || sender.url || '');
@@ -114,11 +149,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         sendResponse({ success: false, error: err });
                         return;
                     }
+
                     chrome.runtime.sendMessage({
                         target: 'offscreen',
                         action: 'start',
-                        data: { streamId, targetTabId: tabId, lang: message.lang || 'ja', model: message.model || 'nova-3', title: message.title || '', channel: message.channel || '', channelLink: message.channelLink || '' }
-                    }, () => { sendResponse({ success: true, streamId }); });
+                        data: {
+                            streamId,
+                            targetTabId: tabId,
+                            lang: message.lang || 'ja',
+                            model: message.model || 'nova-3',
+                            title: message.title || '',
+                            channel: message.channel || '',
+                            channelLink: message.channelLink || ''
+                        }
+                    }, () => {
+                        sendResponse({ success: true, streamId });
+                    });
                 });
             } catch (err) {
                 sendResponse({ success: false, error: err.message });
@@ -127,19 +173,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
-    // Stop tab audio capture
+    // 4. Stop tab audio capture
     if (message.action === 'stopTabCapture') {
         activeCapturingTabId = null;
         activeCapturingVideoId = null;
-        chrome.runtime.sendMessage({ target: 'offscreen', action: 'stop' }, () => { sendResponse({ success: true }); });
+        chrome.runtime.sendMessage({ target: 'offscreen', action: 'stop' }, () => {
+            sendResponse({ success: true });
+        });
         return true;
     }
 
-    // Check if tab is authorized for capture
+    // 5. Check if tab is authorized for capture
     if (message.action === 'checkTabReadiness') {
         const tabId = sender.tab ? sender.tab.id : null;
-        if (!tabId) { sendResponse({ ready: false, authorized: false }); return true; }
-        if (authorizedTabs.has(tabId)) { sendResponse({ ready: true, authorized: true }); return true; }
+        if (!tabId) {
+            sendResponse({ ready: false, authorized: false });
+            return true;
+        }
+        if (authorizedTabs.has(tabId)) {
+            sendResponse({ ready: true, authorized: true });
+            return true;
+        }
 
         chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (streamId) => {
             if (chrome.runtime.lastError || !streamId) {
@@ -152,10 +206,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
-    // Get tab audio stream ID
+    // 6. Get tab audio stream ID
     if (message.action === 'getTabAudioStreamId') {
         const tabId = sender.tab ? sender.tab.id : null;
-        if (!tabId) { sendResponse({ success: false, error: 'No sender tab ID found' }); return true; }
+        if (!tabId) {
+            sendResponse({ success: false, error: 'No sender tab ID found' });
+            return true;
+        }
 
         chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (streamId) => {
             if (chrome.runtime.lastError) {
@@ -173,12 +230,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// --- Tab Events ---
+// =============================================================================
+// Tab Lifecycle & Navigation Events
+// =============================================================================
 
 chrome.action.onClicked.addListener(async (tab) => {
     if (tab && tab.id) {
         authorizedTabs.add(tab.id);
-        try { await chrome.tabs.sendMessage(tab.id, { action: 'toggleOverlay', authorized: true }); } catch (e) {}
+        try {
+            await chrome.tabs.sendMessage(tab.id, { action: 'toggleOverlay', authorized: true });
+        } catch (e) {}
     }
 });
 
@@ -208,14 +269,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 });
 
-// --- Keyboard Shortcut ---
+// =============================================================================
+// Global Commands & Shortcuts
+// =============================================================================
 
 chrome.commands.onCommand.addListener(async (command) => {
     if (command === 'toggle-kotoba') {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && tab.id) {
             authorizedTabs.add(tab.id);
-            try { await chrome.tabs.sendMessage(tab.id, { action: 'toggleOverlay', authorized: true }); } catch (e) {}
+            try {
+                await chrome.tabs.sendMessage(tab.id, { action: 'toggleOverlay', authorized: true });
+            } catch (e) {}
         }
     }
 });

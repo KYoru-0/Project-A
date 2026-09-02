@@ -1,8 +1,14 @@
-// Project KOTOBA - Offscreen Audio Pipeline (Manifest V3)
-// Captures tab audio via MediaStream, plays through <audio> for speaker pass-through,
-// and streams 16kHz Linear16 PCM to the backend WebSocket via ScriptProcessor.
+/**
+ * Project KOTOBA - Offscreen Audio Pipeline (Manifest V3)
+ *
+ * Captures tab audio via MediaStream, routes audio to <audio> for speaker pass-through,
+ * downsamples Web Audio frames to 16kHz Linear16 PCM, and streams binary buffers
+ * to the backend WebSocket pipeline.
+ */
 
-// --- State ---
+// =============================================================================
+// Pipeline State
+// =============================================================================
 
 let mediaStream = null;
 let audioContext = null;
@@ -14,15 +20,20 @@ let currentTargetTabId = null;
 let isRecording = false;
 let speakerAudioEl = null;
 
-// --- PCM Downsampler ---
+// =============================================================================
+// PCM Downsampling & Linear16 Conversion
+// =============================================================================
 
+/**
+ * Downsamples single-channel Float32 audio samples to target sample rate (16kHz Linear16 PCM).
+ */
 function downsampleAndConvertToPCM(inputData, inputSampleRate, outputSampleRate = 16000) {
     if (!inputData || inputData.length === 0) return null;
 
     if (inputSampleRate === outputSampleRate) {
         const pcm = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
-            let s = Math.max(-1, Math.min(1, inputData[i]));
+            const s = Math.max(-1, Math.min(1, inputData[i]));
             pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
         return pcm;
@@ -36,22 +47,31 @@ function downsampleAndConvertToPCM(inputData, inputSampleRate, outputSampleRate 
 
     while (offsetResult < result.length) {
         const nextOffset = Math.round((offsetResult + 1) * ratio);
-        let accum = 0, count = 0;
+        let accum = 0;
+        let count = 0;
+
         for (let i = offsetBuffer; i < nextOffset && i < inputData.length; i++) {
             accum += inputData[i];
             count++;
         }
+
         const avg = count > 0 ? accum / count : 0;
         const clamped = Math.max(-1, Math.min(1, avg));
         result[offsetResult] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7FFF;
         offsetResult++;
         offsetBuffer = nextOffset;
     }
+
     return result;
 }
 
-// --- Notify Extension Contexts ---
+// =============================================================================
+// Extension Communication Helper
+// =============================================================================
 
+/**
+ * Notifies extension background, content scripts, and popups with a message payload.
+ */
 function notify(msg) {
     if (currentTargetTabId && typeof msg === 'object' && msg !== null && !msg.targetTabId) {
         msg.targetTabId = currentTargetTabId;
@@ -59,15 +79,20 @@ function notify(msg) {
     chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
-// --- Recording ---
+// =============================================================================
+// Recording & Stream Lifecycle
+// =============================================================================
 
+/**
+ * Initializes tab audio capture, speaker pass-through playback, and WebSocket streaming.
+ */
 async function startRecording(data) {
     if (isRecording) stopRecording();
     isRecording = true;
     currentTargetTabId = data.targetTabId;
 
     try {
-        // Obtain MediaStream from tabCapture
+        // 1. Obtain MediaStream from tabCapture
         let stream;
         try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -88,7 +113,7 @@ async function startRecording(data) {
             try { mediaStream.removeTrack(t); } catch (e) {}
         });
 
-        // Speaker pass-through via <audio> element (Web Audio destination is silent in offscreen docs)
+        // 2. Speaker pass-through via <audio> element (Web Audio destination is silent in offscreen documents)
         speakerAudioEl = document.getElementById('speaker-passthrough');
         if (!speakerAudioEl) {
             speakerAudioEl = document.createElement('audio');
@@ -107,12 +132,14 @@ async function startRecording(data) {
             }, 200);
         }
 
-        // Web Audio for PCM processing only (not speaker output)
+        // 3. Web Audio Context for PCM processing
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioContext.state === 'suspended') await audioContext.resume();
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
         sourceNode = audioContext.createMediaStreamSource(mediaStream);
 
-        // Connect to backend WebSocket
+        // 4. Connect to backend WebSocket
         const langParam = encodeURIComponent(data.lang || 'ja');
         const wsUrl = `ws://127.0.0.1:8000/listen?language=${langParam}&model=nova-3&title=${encodeURIComponent(data.title || '')}&channel=${encodeURIComponent(data.channel || '')}&channel_link=${encodeURIComponent(data.channelLink || '')}`;
         socket = new WebSocket(wsUrl);
@@ -134,8 +161,8 @@ async function startRecording(data) {
                     } catch (e) {}
                 };
 
-                // source → processor → muted gain → destination
-                // Muted gain ensures ScriptProcessor fires callbacks without doubling audio
+                // Node Topology: source → processor → muted gain → destination
+                // Muted gain ensures ScriptProcessor triggers audio callbacks without doubling volume
                 sourceNode.connect(processorNode);
                 muteGain = audioContext.createGain();
                 muteGain.gain.value = 0.0;
@@ -147,7 +174,9 @@ async function startRecording(data) {
         };
 
         socket.onmessage = (event) => {
-            try { notify(JSON.parse(event.data)); } catch (e) {}
+            try {
+                notify(JSON.parse(event.data));
+            } catch (e) {}
         };
 
         socket.onerror = () => {
@@ -166,11 +195,17 @@ async function startRecording(data) {
     }
 }
 
+/**
+ * Tears down active audio nodes, audio stream, and WebSocket connection.
+ */
 function stopRecording() {
     isRecording = false;
 
     if (processorNode) {
-        try { processorNode.disconnect(); processorNode.onaudioprocess = null; } catch (e) {}
+        try {
+            processorNode.disconnect();
+            processorNode.onaudioprocess = null;
+        } catch (e) {}
         processorNode = null;
     }
     if (muteGain) {
@@ -186,7 +221,10 @@ function stopRecording() {
         audioContext = null;
     }
     if (speakerAudioEl) {
-        try { speakerAudioEl.pause(); speakerAudioEl.srcObject = null; } catch (e) {}
+        try {
+            speakerAudioEl.pause();
+            speakerAudioEl.srcObject = null;
+        } catch (e) {}
         speakerAudioEl = null;
     }
     if (mediaStream) {
@@ -194,14 +232,20 @@ function stopRecording() {
         mediaStream = null;
     }
     if (socket) {
-        try { if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close(); } catch (e) {}
+        try {
+            if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+                socket.close();
+            }
+        } catch (e) {}
         socket = null;
     }
 
     notify({ type: 'capture_status', status: 'stopped' });
 }
 
-// --- Message Listener ---
+// =============================================================================
+// Message Listener
+// =============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.target !== 'offscreen') return;

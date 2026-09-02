@@ -1,23 +1,27 @@
-/* ==========================================================================
-   Project KOTOBA - Output Page KYoru Theme (Black, White, Yellow)
-   ========================================================================== */
+/* =============================================================================
+   Project KOTOBA - Output Page Theme (Black, White, Yellow)
+   ============================================================================= */
 
 :root {
-    /* Palette: Black, White, Yellow */
+    /* Color Palette */
     --color-black: #000000;
     --color-white: #ffffff;
     --color-yellow: #facc15;
     --color-yellow-light: #fde047;
     --color-yellow-dark: #ca8a04;
 
+    /* Backgrounds */
     --bg-base: #000000;
     --bg-surface: rgba(10, 10, 14, 0.90);
     --bg-card: rgba(18, 18, 24, 0.75);
     --bg-card-hover: rgba(28, 28, 36, 0.85);
+
+    /* Borders */
     --border-subtle: rgba(255, 255, 255, 0.10);
     --border-highlight: rgba(250, 204, 21, 0.40);
     --border-highlight-hover: rgba(250, 204, 21, 0.85);
 
+    /* Actions & Brand */
     --primary: #facc15;
     --primary-hover: #eab308;
     --primary-glow: rgba(250, 204, 21, 0.35);
@@ -31,6 +35,7 @@
     --success: #facc15;
     --warning: #f59e0b;
 
+    /* Typography */
     --text-primary: #ffffff;
     --text-secondary: #a1a1aa;
     --text-muted: #71717a;
@@ -66,7 +71,10 @@ html, body {
     background: #000000;
 }
 
-/* Header */
+/* =============================================================================
+   Header & Brand
+   ============================================================================= */
+
 .app-header {
     display: flex;
     align-items: center;
@@ -176,7 +184,10 @@ html, body {
     background-color: var(--danger);
 }
 
-/* Controls Container */
+/* =============================================================================
+   Controls & Stream Information Banner
+   ============================================================================= */
+
 .controls-container {
     display: flex;
     flex-direction: column;
@@ -213,7 +224,8 @@ html, body {
     letter-spacing: 0.4px;
 }
 
-.dropdown-select {
+.dropdown-select,
+.control-select {
     width: 100%;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border-subtle);
@@ -230,12 +242,19 @@ html, body {
     transition: all 0.2s ease;
 }
 
-.dropdown-select:hover, .dropdown-select:focus {
+.control-select {
+    width: auto;
+    min-width: 160px;
+}
+
+.dropdown-select:hover, .dropdown-select:focus,
+.control-select:hover, .control-select:focus {
     border-color: var(--primary);
     background: rgba(255, 255, 255, 0.08);
 }
 
-.dropdown-select option {
+.dropdown-select option,
+.control-select option {
     background: #141a28;
     color: var(--text-primary);
 }
@@ -268,12 +287,33 @@ html, body {
     opacity: 0.7;
 }
 
+.yt-placeholder-text {
+    font-size: 11px;
+}
+
 .yt-info-content {
     display: flex;
     flex-direction: column;
     gap: 2px;
     width: 100%;
     min-width: 0;
+}
+
+.yt-info-channel-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.yt-channel-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 100%;
 }
 
 .yt-info-title-row {
@@ -325,23 +365,6 @@ html, body {
     opacity: 0.9;
 }
 
-.yt-info-channel-row {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-}
-
-.yt-channel-name {
-    font-size: 11px;
-    font-weight: 700;
-    color: #ffffff;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-    max-width: 100%;
-}
-
 .yt-video-title {
     font-size: 11px;
     color: var(--text-secondary);
@@ -355,9 +378,9 @@ html, body {
 
 .action-btn-bar-inline {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
-    padding-top: 14px;
+    width: 100%;
 }
 
 .icon-btn-action {
@@ -367,17 +390,12 @@ html, body {
     border-radius: 8px;
     width: 32px;
     height: 32px;
-    margin-top: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
     transition: all 0.2s ease;
-}
-
-.action-btn-bar-inline .icon-btn-action {
-    margin-top: 0;
 }
 
 .icon-btn-action:hover {
@@ -449,7 +467,10 @@ html, body {
     border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Dual Side-by-Side Split Panes */
+/* =============================================================================
+   Dual Split-Feed Panels
+   ============================================================================= */
+
 .dual-pane-main {
     flex: 1;
     display: grid;
@@ -598,14 +619,17 @@ html, body {
     line-height: 1.4;
 }
 
-/* Compact Subtitle / Transcript Feed */
+/* =============================================================================
+   Feed Lines & Highlights
+   ============================================================================= */
+
 .transcript-list {
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
-/* Left Pane: Compact Live Transcription Line */
+/* Left Pane: Live Transcription Line */
 .transcript-line {
     display: flex;
     align-items: baseline;
@@ -631,7 +655,6 @@ html, body {
     font-size: 13.5px;
 }
 
-/* Timestamp: only shown on hover */
 .transcript-line .line-time {
     font-family: var(--font-mono);
     font-size: 9px;
@@ -647,7 +670,7 @@ html, body {
     opacity: 1;
 }
 
-/* Automatic Highlight Shade for Latest Translation & Corresponding Sentences (White) */
+/* Latest Active Translation & Sentence Highlight (White) */
 .transcript-line.latest-active,
 .translation-line.latest-active {
     background: rgba(255, 255, 255, 0.06) !important;
@@ -666,7 +689,7 @@ html, body {
     color: #e2e8f0 !important;
 }
 
-/* Hover Sentence Highlight across panes (Yellow text only) */
+/* Hover Sentence Highlight across panes (Yellow text) */
 .transcript-line.highlight-match .line-text,
 .translation-line.highlight-match .trans-text {
     color: #facc15 !important;
@@ -678,7 +701,7 @@ html, body {
     color: #fde047 !important;
 }
 
-/* Right Pane: Compact Live Translation Line */
+/* Right Pane: Live Translation Line */
 .translation-line {
     display: flex;
     flex-direction: column;
@@ -761,6 +784,23 @@ html, body {
     opacity: 0.88;
 }
 
+.live-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.live-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-yellow);
+    box-shadow: 0 0 6px var(--color-yellow);
+    animation: pulse 1s infinite;
+}
+
 .live-dot {
     width: 6px;
     height: 6px;
@@ -775,7 +815,10 @@ html, body {
     font-size: 11.5px;
 }
 
-/* Footer Status Bar */
+/* =============================================================================
+   Footer & Toast Notifications
+   ============================================================================= */
+
 .app-footer {
     display: flex;
     align-items: center;
@@ -808,7 +851,6 @@ html, body {
     color: var(--text-muted);
 }
 
-/* Toast Message */
 .toast {
     position: fixed;
     bottom: 40px;
@@ -825,7 +867,7 @@ html, body {
     pointer-events: none;
     opacity: 0;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
+    z-index: 10000;
 }
 
 .toast.show {
@@ -833,18 +875,9 @@ html, body {
     opacity: 1;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes pulse {
-    0% { opacity: 0.6; transform: scale(0.95); }
-    50% { opacity: 1; transform: scale(1.1); }
-    100% { opacity: 0.6; transform: scale(0.95); }
-}
-
-/* ==================== VTuber Profile Modal Card ==================== */
+/* =============================================================================
+   VTuber Profile Modal Card
+   ============================================================================= */
 
 .yt-channel-clickable {
     cursor: pointer !important;
@@ -1023,7 +1056,7 @@ html, body {
     border-radius: 12px;
 }
 
-/* Card Description Section (Top Part) */
+/* Card Description Section */
 .modal-card-desc-container {
     margin-top: 6px;
     font-size: 11.5px;
@@ -1052,6 +1085,7 @@ html, body {
 .modal-card-desc-text::-webkit-scrollbar {
     width: 3px;
 }
+
 .modal-card-desc-text::-webkit-scrollbar-thumb {
     background: rgba(250, 204, 21, 0.35);
     border-radius: 2px;
@@ -1087,6 +1121,7 @@ html, body {
 .modal-card-body::-webkit-scrollbar {
     width: 4px;
 }
+
 .modal-card-body::-webkit-scrollbar-thumb {
     background: rgba(250, 204, 21, 0.35);
     border-radius: 2px;
@@ -1135,7 +1170,9 @@ html, body {
     padding: 6px 0;
 }
 
-/* ==================== Context Summary Popover ==================== */
+/* =============================================================================
+   Context Summary Popover
+   ============================================================================= */
 
 .summary-btn-wrap {
     position: relative;
@@ -1201,4 +1238,19 @@ html, body {
 .summary-popover-body::-webkit-scrollbar-thumb {
     background: rgba(250, 204, 21, 0.3);
     border-radius: 2px;
-}
+}
+
+/* =============================================================================
+   Animations
+   ============================================================================= */
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1.1); }
+    100% { opacity: 0.6; transform: scale(0.95); }
+}
