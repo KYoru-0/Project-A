@@ -113,7 +113,8 @@ async function startRecording(data) {
         sourceNode = audioContext.createMediaStreamSource(mediaStream);
 
         // Connect to backend WebSocket
-        const wsUrl = `ws://127.0.0.1:8000/listen?language=ja&model=nova-3&title=${encodeURIComponent(data.title || '')}&channel=${encodeURIComponent(data.channel || '')}`;
+        const langParam = encodeURIComponent(data.lang || 'ja');
+        const wsUrl = `ws://127.0.0.1:8000/listen?language=${langParam}&model=nova-3&title=${encodeURIComponent(data.title || '')}&channel=${encodeURIComponent(data.channel || '')}&channel_link=${encodeURIComponent(data.channelLink || '')}`;
         socket = new WebSocket(wsUrl);
         socket.binaryType = 'arraybuffer';
 

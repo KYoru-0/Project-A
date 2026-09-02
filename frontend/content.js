@@ -19,7 +19,7 @@
     let shadowRoot = null;
     let triggerBtn = null, triggerLabel = null, overlayPanel = null, triggerPulse = null, toastEl = null;
     let statusBadge = null, channelNameEl = null, videoTitleEl = null;
-    let toggleBtn = null, toggleBtnLabel = null, toggleBtnIcon = null;
+    let toggleBtn = null, toggleBtnLabel = null, toggleBtnIcon = null, langSelect = null;
     let clearBtn = null, copyTranscriptsBtn = null, copyTranslationBtn = null, closeBtn = null;
     let transcriptsFeed = null, translationFeed = null;
     let transcriptsScroll = null, translationScroll = null;
@@ -28,6 +28,11 @@
     let liveBubble = null, liveText = null, bubbleQueue = null;
     let relevantChatSlot = null, relevantChatAuthor = null, relevantChatMsg = null;
     let relevantChatTime = null, relevantChatTooltip = null;
+    let vtuberModal = null, cardAvatarWrap = null, cardAvatarImg = null;
+    let cardNameEl = null, cardOfficeEl = null, cardFactsList = null, cardCloseBtn = null;
+    let cardDescWrap = null, cardDescText = null, cardSeeMoreBtn = null;
+    let channelHoverCard = null, channelHoverAvatar = null;
+    let lastVtuberProfile = null;
 
     let isOverlayOpen = false;
     let isCapturing = false;
@@ -55,16 +60,31 @@
                   .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
+    function extractChannelAvatar() {
+        const selectors = [
+            '#owner #avatar img',
+            'ytd-video-owner-renderer #avatar img',
+            '#owner yt-img-shadow img',
+            'ytd-channel-name img',
+            '#avatar img',
+            '#owner img',
+            'img.yt-core-image[src*="yt3.ggpht.com"]'
+        ];
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el && el.src && !el.src.includes('data:image/svg')) {
+                return el.src;
+            }
+        }
+        return chrome.runtime.getURL('icons/256.png');
+    }
+
     function cleanChannelName(raw) {
         if (!raw) return '';
         let s = raw.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean)[0] || '';
-        s = s.trim();
-        s = s.replace(/\s*•\s*[\d.]+[KMB]?\s*subscribers.*$/i, '').trim();
-        if (s.length >= 4 && s.length % 2 === 0) {
-            const half = s.length / 2;
-            if (s.slice(0, half) === s.slice(half)) {
-                s = s.slice(0, half).trim();
-            }
+        s = s.trim().replace(/\s*•\s*[\d.]+[KMB]?\s*subscribers.*$/i, '').trim();
+        if (s.length >= 4 && s.length % 2 === 0 && s.slice(0, s.length / 2) === s.slice(s.length / 2)) {
+            s = s.slice(0, s.length / 2).trim();
         }
         const words = s.split(/\s+/);
         if (words.length >= 2 && words.length % 2 === 0) {
@@ -96,11 +116,16 @@
         } catch (e) { return null; }
     }
 
+    let toastTimeout = null;
     function showToast(text) {
         if (!toastEl) return;
         toastEl.textContent = text;
         toastEl.classList.add('show');
-        setTimeout(() => toastEl.classList.remove('show'), 2500);
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+            toastEl.classList.remove('show');
+            toastTimeout = null;
+        }, 2500);
     }
 
     // ==================== Metadata ====================
@@ -121,30 +146,47 @@
             }
 
             let channel = '';
+            let channelLink = '';
+            // Primary: get channel name + link from the <a> inside channel-name
             const channelEl = document.querySelector(
                 'ytd-video-owner-renderer ytd-channel-name yt-formatted-string#text a, ' +
-                'ytd-video-owner-renderer ytd-channel-name yt-formatted-string a, ' +
+                'ytd-video-owner-renderer ytd-channel-name a, ' +
                 '#owner ytd-channel-name #text a, ' +
-                '#owner #channel-name #text a, ' +
-                'ytd-channel-name yt-formatted-string#text a, ' +
                 '#owner #channel-name a, ' +
-                'ytd-channel-name yt-formatted-string a, ' +
                 '#upload-info #channel-name a, ' +
-                '#owner-name a, ' +
-                'ytd-video-owner-renderer #channel-name a, ' +
-                '#text.ytd-channel-name a, ' +
-                'ytd-channel-name a, ' +
-                '#channel-name'
+                'ytd-channel-name a'
             );
-            if (channelEl && channelEl.textContent && channelEl.textContent.trim()) {
-                channel = cleanChannelName(channelEl.textContent);
+            if (channelEl) {
+                if (channelEl.textContent && channelEl.textContent.trim()) {
+                    channel = cleanChannelName(channelEl.textContent);
+                }
+                const h = channelEl.href || (channelEl.getAttribute && channelEl.getAttribute('href'));
+                if (h && !h.startsWith('javascript:')) {
+                    try { channelLink = new URL(h, window.location.origin).href; } catch(e){ channelLink = h; }
+                }
             }
+            // Fallback: get channel link from avatar or other owner links
+            if (!channelLink) {
+                const linkEl = document.querySelector(
+                    'ytd-video-owner-renderer a#avatar, ' +
+                    '#owner a#avatar, ' +
+                    '#owner a[href*="/@"], ' +
+                    '#owner a[href*="/channel/"], ' +
+                    'ytd-video-owner-renderer a[href*="/@"], ' +
+                    'ytd-video-owner-renderer a[href*="/channel/"]'
+                );
+                if (linkEl) {
+                    const h = linkEl.href || (linkEl.getAttribute && linkEl.getAttribute('href'));
+                    if (h && !h.startsWith('javascript:')) {
+                        try { channelLink = new URL(h, window.location.origin).href; } catch(e) { channelLink = h; }
+                    }
+                }
+            }
+            // Fallback: get channel name from meta tags
             if (!channel) {
-                const ma = document.querySelector('link[itemprop="name"]');
-                if (ma && ma.getAttribute('content')) { channel = cleanChannelName(ma.getAttribute('content')); }
-                else {
-                    const mn = document.querySelector('meta[name="author"], meta[property="og:video:actor"]');
-                    if (mn) channel = cleanChannelName(mn.content || mn.getAttribute('content') || '');
+                const mn = document.querySelector('meta[name="author"], meta[property="og:video:actor"]');
+                if (mn && (mn.content || mn.getAttribute('content'))) {
+                    channel = cleanChannelName(mn.content || mn.getAttribute('content'));
                 }
             }
 
@@ -161,19 +203,140 @@
                 status: isLive ? 'LIVE' : 'PLAYBACK',
                 title: title || document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Stream',
                 channel: channel || 'YouTube Channel',
+                channelLink: channelLink || '',
             };
         } catch (e) {
-            return { status: 'PLAYBACK', title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video', channel: 'YouTube Channel' };
+            return { status: 'PLAYBACK', title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video', channel: 'YouTube Channel', channelLink: '' };
         }
     }
 
-    function updateMetadataUI() {
+    let lastQueriedChannel = '';
+    let resolvedVtuberName = '';
+    let currentChannelLink = '';
+
+    async function updateMetadataUI() {
         if (!statusBadge || !channelNameEl || !videoTitleEl) return;
+
+        const vId = getVideoIdFromUrl(window.location.href);
+        if (vId && vId !== currentVideoId) {
+            currentVideoId = vId;
+            lastQueriedChannel = '';
+            resolvedVtuberName = '';
+            currentChannelLink = '';
+            lastVtuberProfile = null;
+        }
+
         const meta = extractYouTubeMetadata();
         statusBadge.className = meta.status === 'LIVE' ? 'kotoba-badge-status live' : 'kotoba-badge-status playback';
         statusBadge.textContent = meta.status;
-        channelNameEl.textContent = meta.channel || 'YouTube Channel';
         videoTitleEl.textContent = meta.title || 'YouTube Stream';
+        currentChannelLink = meta.channelLink || currentChannelLink || '';
+
+        const queryKey = `${meta.channel}|${currentChannelLink}`;
+        if (queryKey === lastQueriedChannel && resolvedVtuberName) {
+            channelNameEl.textContent = resolvedVtuberName;
+            return;
+        }
+
+        channelNameEl.textContent = resolvedVtuberName || meta.channel || 'YouTube Channel';
+
+        if (meta.channel || currentChannelLink) {
+            lastQueriedChannel = queryKey;
+            try {
+                const query = new URLSearchParams({ channel_name: meta.channel || '', channel_link: currentChannelLink });
+                const res = await fetch(`http://127.0.0.1:8000/api/vtuber/lookup?${query.toString()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data) {
+                        lastVtuberProfile = data;
+                        if (data.display_name) {
+                            resolvedVtuberName = data.display_name;
+                            channelNameEl.textContent = data.display_name;
+                        }
+                        if (data.channels?.[0]?.channel_link && !currentChannelLink) {
+                            currentChannelLink = data.channels[0].channel_link;
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+    }
+
+    async function openVtuberCard() {
+        if (!vtuberModal) return;
+        const avatarSrc = extractChannelAvatar();
+
+        if (cardAvatarImg) cardAvatarImg.src = avatarSrc;
+        if (cardAvatarWrap) {
+            cardAvatarWrap.onclick = (e) => {
+                e.stopPropagation();
+                const link = extractYouTubeMetadata().channelLink || currentChannelLink;
+                if (link) window.open(link, '_blank');
+            };
+        }
+
+        let profile = lastVtuberProfile;
+        if (!profile) {
+            const meta = extractYouTubeMetadata();
+            try {
+                const query = new URLSearchParams({ channel_name: meta.channel || '', channel_link: currentChannelLink });
+                const res = await fetch(`http://127.0.0.1:8000/api/vtuber/lookup?${query.toString()}`);
+                if (res.ok) {
+                    profile = await res.json();
+                    lastVtuberProfile = profile;
+                    if (profile?.channels?.[0]?.channel_link) currentChannelLink = profile.channels[0].channel_link;
+                }
+            } catch (e) {}
+        }
+
+        if (cardNameEl) cardNameEl.textContent = profile?.display_name || channelNameEl?.textContent || 'Channel Name';
+
+        if (cardOfficeEl) {
+            if (profile?.office_name) {
+                cardOfficeEl.textContent = profile.office_name;
+                cardOfficeEl.style.display = 'inline-flex';
+            } else {
+                cardOfficeEl.style.display = 'none';
+            }
+        }
+
+        if (cardDescWrap && cardDescText) {
+            const desc = (profile?.description || '').trim();
+            if (desc) {
+                cardDescText.textContent = desc;
+                cardDescWrap.style.display = 'block';
+                cardDescWrap.classList.remove('expanded');
+                if (cardSeeMoreBtn) {
+                    cardSeeMoreBtn.textContent = 'See more';
+                    cardSeeMoreBtn.style.display = desc.length > 50 || desc.includes('\n') ? 'inline-block' : 'none';
+                }
+            } else {
+                cardDescWrap.style.display = 'none';
+            }
+        }
+
+        if (cardFactsList) {
+            cardFactsList.innerHTML = '';
+            if (profile?.facts?.length > 0) {
+                profile.facts.forEach(fact => {
+                    const li = document.createElement('li');
+                    li.className = 'kotoba-card-fact-item';
+                    li.textContent = fact;
+                    cardFactsList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.className = 'kotoba-card-empty-state';
+                li.textContent = 'No extra facts found for this channel.';
+                cardFactsList.appendChild(li);
+            }
+        }
+
+        vtuberModal.classList.add('open');
+    }
+
+    function closeVtuberCard() {
+        if (vtuberModal) vtuberModal.classList.remove('open');
     }
 
     function scheduleMetadataUpdates() {
@@ -190,6 +353,16 @@
         const target = document.querySelector('ytd-watch-metadata') || document.querySelector('#owner') || document.body;
         if (target) metaObserver.observe(target, { childList: true, subtree: true, characterData: true });
     }
+
+    ['yt-navigate-finish', 'yt-page-data-updated', 'popstate'].forEach(evt => {
+        window.addEventListener(evt, () => {
+            lastQueriedChannel = '';
+            resolvedVtuberName = '';
+            currentChannelLink = '';
+            lastVtuberProfile = null;
+            scheduleMetadataUpdates();
+        });
+    });
 
     // ==================== DOM Construction ====================
 
@@ -209,22 +382,21 @@
         const wrapper = document.createElement('div');
         wrapper.className = 'kotoba-wrapper';
         wrapper.innerHTML = `
-            <button id="kotoba-trigger-btn" class="unauthorized" title="Press Alt+K to authorize &amp; open KOTOBA">
-                <span class="kotoba-btn-pulse" id="kotoba-trigger-pulse"></span>
-                <span id="kotoba-trigger-label">Press Alt+K to open KOTOBA</span>
-            </button>
+            <button id="kotoba-trigger-btn" class="unauthorized" title="Press Alt+K (or click toolbar icon) to authorize &amp; open KOTOBA" style="background-image: url('${chrome.runtime.getURL('icons/256.png')}');"></button>
             <div id="kotoba-overlay-panel">
                 <div class="kotoba-bubble-queue" id="kotoba-bubble-queue"></div>
                 <div class="kotoba-toast" id="kotoba-toast">Notice</div>
                 <div class="kotoba-header">
                     <div class="kotoba-header-left">
-                        <div class="kotoba-logo-title">KOTOBA</div>
+                        <img class="kotoba-logo-img" src="${chrome.runtime.getURL('icons/256.png')}" alt="KOTOBA">
                         <div class="kotoba-header-info">
-                            <div class="kotoba-header-top-row">
-                                <span class="kotoba-badge-status playback" id="kotoba-badge-status">PLAYBACK</span>
-                                <span class="kotoba-channel-name" id="kotoba-channel-name">Channel Name</span>
+                            <div class="kotoba-header-channel-row">
+                                <span class="kotoba-channel-name kotoba-channel-clickable" id="kotoba-channel-name">Channel Name</span>
                             </div>
-                            <div class="kotoba-video-title" id="kotoba-video-title">Stream / Video Title</div>
+                            <div class="kotoba-header-bottom-row">
+                                <span class="kotoba-badge-status playback" id="kotoba-badge-status">PLAYBACK</span>
+                                <span class="kotoba-video-title" id="kotoba-video-title">Stream / Video Title</span>
+                            </div>
                         </div>
                     </div>
                     <div class="kotoba-header-actions">
@@ -237,11 +409,36 @@
                             <span id="kotoba-btn-icon">▶</span>
                             <span id="kotoba-btn-label">Start Capture</span>
                         </button>
+                        <select class="kotoba-select" id="kotoba-lang-select" title="Speech Recognition Language">
+                            <option value="ja" selected>Japanese (日本語)</option>
+                            <option value="en">English</option>
+                            <option value="zh">Chinese - Simplified (简体中文)</option>
+                            <option value="zh-TW">Chinese - Traditional (繁體中文)</option>
+                            <option value="zh-HK">Cantonese (廣東話)</option>
+                            <option value="ko">Korean (한국어)</option>
+                            <option value="es">Spanish (Español)</option>
+                            <option value="fr">French (Français)</option>
+                            <option value="de">German (Deutsch)</option>
+                            <option value="it">Italian (Italiano)</option>
+                            <option value="pt">Portuguese (Português)</option>
+                            <option value="ru">Russian (Русский)</option>
+                            <option value="hi">Hindi (हिन्दी)</option>
+                            <option value="id">Indonesian (Bahasa)</option>
+                            <option value="th">Thai (ไทย)</option>
+                            <option value="vi">Vietnamese (Tiếng Việt)</option>
+                            <option value="tl">Tagalog (Filipino)</option>
+                            <option value="tr">Turkish (Türkçe)</option>
+                            <option value="ar">Arabic (العربية)</option>
+                            <option value="nl">Dutch (Nederlands)</option>
+                            <option value="no">Norwegian (Norsk)</option>
+                            <option value="pl">Polish (Polski)</option>
+                            <option value="sv">Swedish (Svenska)</option>
+                            <option value="uk">Ukrainian (Українська)</option>
+                            <option value="multi">Multilingual (Auto)</option>
+                        </select>
                     </div>
                     <div class="kotoba-controls-right">
-                        <button class="kotoba-subtle-btn" id="kotoba-copy-transcripts" title="Copy Japanese Transcripts">Copy JA</button>
-                        <button class="kotoba-subtle-btn" id="kotoba-copy-translation" title="Copy English Translations">Copy EN</button>
-                        <button class="kotoba-subtle-btn" id="kotoba-clear-btn" title="Clear Feed">Clear</button>
+                        <button class="kotoba-subtle-btn" id="kotoba-clear-btn" title="Clear Feed">Clear Feed</button>
                     </div>
                 </div>
                 <div class="kotoba-relevant-chat-slot" id="kotoba-relevant-chat-slot">
@@ -255,7 +452,18 @@
                 </div>
                 <div class="kotoba-dual-pane">
                     <div class="kotoba-pane">
-                        <div class="kotoba-pane-header"><span>Live Transcription (JA)</span><span class="kotoba-pane-badge" id="kotoba-transcripts-badge">0 lines</span></div>
+                        <div class="kotoba-pane-header">
+                            <span>Live Transcription</span>
+                            <div class="kotoba-pane-header-actions">
+                                <span class="kotoba-pane-badge" id="kotoba-transcripts-badge">0 lines</span>
+                                <button class="kotoba-pane-icon-btn" id="kotoba-copy-transcripts" title="Copy Transcripts">
+                                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="8.5" y="8.5" width="12" height="12" rx="3"></rect>
+                                        <path d="M4.5 15.5C3.94772 15.5 3.5 15.0523 3.5 14.5V5.5C3.5 4.39543 4.39543 3.5 5.5 3.5H14.5C15.0523 3.5 15.5 3.94772 15.5 4.5"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                         <div class="kotoba-feed-scroll" id="kotoba-transcripts-scroll">
                             <div class="kotoba-empty-state" id="kotoba-transcripts-empty">Ready. Press Start Capture to transcribe speech.</div>
                             <div class="kotoba-feed-list" id="kotoba-transcripts-feed"></div>
@@ -263,7 +471,18 @@
                         </div>
                     </div>
                     <div class="kotoba-pane">
-                        <div class="kotoba-pane-header"><span>Live Translation (EN)</span><span class="kotoba-pane-badge" id="kotoba-translation-badge">0 lines</span></div>
+                        <div class="kotoba-pane-header">
+                            <span>Live Translation</span>
+                            <div class="kotoba-pane-header-actions">
+                                <span class="kotoba-pane-badge" id="kotoba-translation-badge">0 lines</span>
+                                <button class="kotoba-pane-icon-btn" id="kotoba-copy-translation" title="Copy Translations">
+                                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="8.5" y="8.5" width="12" height="12" rx="3"></rect>
+                                        <path d="M4.5 15.5C3.94772 15.5 3.5 15.0523 3.5 14.5V5.5C3.5 4.39543 4.39543 3.5 5.5 3.5H14.5C15.0523 3.5 15.5 3.94772 15.5 4.5"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                         <div class="kotoba-feed-scroll" id="kotoba-translation-scroll">
                             <div class="kotoba-empty-state" id="kotoba-translation-empty">Translations (2-sentence batches) will appear here.</div>
                             <div class="kotoba-feed-list" id="kotoba-translation-feed"></div>
@@ -271,14 +490,49 @@
                     </div>
                 </div>
             </div>
+
+            <!-- VTuber Profile Modal Card -->
+            <div class="kotoba-modal-backdrop" id="kotoba-vtuber-modal">
+                <div class="kotoba-card">
+                    <button class="kotoba-card-close" id="kotoba-card-close" title="Close">✕</button>
+                    <div class="kotoba-card-header">
+                        <div class="kotoba-card-avatar-wrap" id="kotoba-card-avatar-wrap" title="Visit Channel">
+                            <img class="kotoba-card-avatar-img" id="kotoba-card-avatar-img" src="" alt="Avatar">
+                            <div class="kotoba-card-avatar-overlay">
+                                <svg class="kotoba-card-avatar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M10.0002 5H8.2002C7.08009 5 6.51962 5 6.0918 5.21799C5.71547 5.40973 5.40973 5.71547 5.21799 6.0918C5 6.51962 5 7.08009 5 8.2002V15.8002C5 16.9203 5 17.4801 5.21799 17.9079C5.40973 18.2842 5.71547 18.5905 6.0918 18.7822C6.5192 19 7.07899 19 8.19691 19H15.8031C16.921 19 17.48 19 17.9074 18.7822C18.2837 18.5905 18.5905 18.2839 18.7822 17.9076C19 17.4802 19 16.921 19 15.8031V14M20 9V4M20 4H15M20 4L13 11" stroke="#facc15" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="kotoba-card-info">
+                            <div class="kotoba-card-title" id="kotoba-card-name">Channel Name</div>
+                            <div class="kotoba-card-office" id="kotoba-card-office" style="display: none;"></div>
+                            <div class="kotoba-card-desc-container" id="kotoba-card-desc-wrap" style="display: none;">
+                                <div class="kotoba-card-desc-text" id="kotoba-card-desc-text"></div>
+                                <button class="kotoba-card-see-more-btn" id="kotoba-card-see-more-btn">See more</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kotoba-card-body">
+                        <div class="kotoba-card-section-title">Extra Facts</div>
+                        <ul class="kotoba-card-facts-list" id="kotoba-card-facts">
+                            <li class="kotoba-card-empty-state">No extra facts found for this channel.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Channel Hover Follow Card -->
+            <div class="kotoba-channel-hover-card" id="kotoba-channel-hover-card" style="display: none;">
+                <img class="kotoba-channel-hover-avatar" id="kotoba-channel-hover-avatar" src="" alt="Avatar">
+                <span class="kotoba-channel-hover-guide">Click to show channel's profile</span>
+            </div>
         `;
         shadowRoot.appendChild(wrapper);
 
         // Bind elements
         triggerBtn = shadowRoot.getElementById('kotoba-trigger-btn');
-        triggerLabel = shadowRoot.getElementById('kotoba-trigger-label');
         overlayPanel = shadowRoot.getElementById('kotoba-overlay-panel');
-        triggerPulse = shadowRoot.getElementById('kotoba-trigger-pulse');
         toastEl = shadowRoot.getElementById('kotoba-toast');
         statusBadge = shadowRoot.getElementById('kotoba-badge-status');
         channelNameEl = shadowRoot.getElementById('kotoba-channel-name');
@@ -286,6 +540,14 @@
         toggleBtn = shadowRoot.getElementById('kotoba-toggle-btn');
         toggleBtnLabel = shadowRoot.getElementById('kotoba-btn-label');
         toggleBtnIcon = shadowRoot.getElementById('kotoba-btn-icon');
+        langSelect = shadowRoot.getElementById('kotoba-lang-select');
+        if (langSelect) {
+            const savedLang = localStorage.getItem('kotoba_selected_lang');
+            if (savedLang) langSelect.value = savedLang;
+            langSelect.addEventListener('change', () => {
+                localStorage.setItem('kotoba_selected_lang', langSelect.value);
+            });
+        }
         clearBtn = shadowRoot.getElementById('kotoba-clear-btn');
         copyTranscriptsBtn = shadowRoot.getElementById('kotoba-copy-transcripts');
         copyTranslationBtn = shadowRoot.getElementById('kotoba-copy-translation');
@@ -307,8 +569,25 @@
         relevantChatTooltip = shadowRoot.getElementById('kotoba-chat-tooltip');
         bubbleQueue = shadowRoot.getElementById('kotoba-bubble-queue');
 
+        // Modal elements
+        vtuberModal = shadowRoot.getElementById('kotoba-vtuber-modal');
+        cardAvatarWrap = shadowRoot.getElementById('kotoba-card-avatar-wrap');
+        cardAvatarImg = shadowRoot.getElementById('kotoba-card-avatar-img');
+        cardNameEl = shadowRoot.getElementById('kotoba-card-name');
+        cardOfficeEl = shadowRoot.getElementById('kotoba-card-office');
+        cardDescWrap = shadowRoot.getElementById('kotoba-card-desc-wrap');
+        cardDescText = shadowRoot.getElementById('kotoba-card-desc-text');
+        cardSeeMoreBtn = shadowRoot.getElementById('kotoba-card-see-more-btn');
+        channelHoverCard = shadowRoot.getElementById('kotoba-channel-hover-card');
+        channelHoverAvatar = shadowRoot.getElementById('kotoba-channel-hover-avatar');
+        cardFactsList = shadowRoot.getElementById('kotoba-card-facts');
+        cardCloseBtn = shadowRoot.getElementById('kotoba-card-close');
+
         makeDraggable(shadowRoot.querySelector('.kotoba-header'), overlayPanel);
         attachEventListeners();
+        observeYouTubeMetadata();
+        scheduleMetadataUpdates();
+        setInterval(updateMetadataUI, 3000);
     }
 
     // ==================== UI Interaction ====================
@@ -356,11 +635,11 @@
         if (triggerBtn) {
             if (authorized) {
                 triggerBtn.classList.remove('unauthorized');
-                if (triggerLabel) triggerLabel.textContent = 'KOTOBA';
+                triggerBtn.removeAttribute('disabled');
                 triggerBtn.title = 'Open KOTOBA Live Translator';
             } else {
                 triggerBtn.classList.add('unauthorized');
-                if (triggerLabel) triggerLabel.textContent = 'Press Alt+K to open KOTOBA';
+                triggerBtn.setAttribute('disabled', 'true');
                 triggerBtn.title = 'Press Alt+K (or click toolbar icon) to authorize & open KOTOBA';
             }
         }
@@ -424,6 +703,61 @@
             renderRelevantComment(null);
             if (bubbleQueue) bubbleQueue.innerHTML = '';
             showToast('Feed cleared');
+        });
+
+        // VTuber Modal & Channel Hover Event Listeners
+        if (channelNameEl) {
+            channelNameEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (channelHoverCard) channelHoverCard.style.display = 'none';
+                openVtuberCard();
+            });
+
+            channelNameEl.addEventListener('mouseenter', (e) => {
+                if (!channelHoverCard) return;
+                const avatar = extractChannelAvatar();
+                if (channelHoverAvatar) channelHoverAvatar.src = avatar;
+                channelHoverCard.style.display = 'flex';
+                channelHoverCard.style.left = `${e.clientX + 12}px`;
+                channelHoverCard.style.top = `${e.clientY + 12}px`;
+            });
+
+            channelNameEl.addEventListener('mousemove', (e) => {
+                if (!channelHoverCard || channelHoverCard.style.display === 'none') return;
+                channelHoverCard.style.left = `${e.clientX + 12}px`;
+                channelHoverCard.style.top = `${e.clientY + 12}px`;
+            });
+
+            channelNameEl.addEventListener('mouseleave', () => {
+                if (channelHoverCard) channelHoverCard.style.display = 'none';
+            });
+        }
+        if (cardCloseBtn) {
+            cardCloseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeVtuberCard();
+            });
+        }
+        if (cardSeeMoreBtn) {
+            cardSeeMoreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!cardDescWrap) return;
+                const isExpanded = cardDescWrap.classList.toggle('expanded');
+                cardSeeMoreBtn.textContent = isExpanded ? 'See less' : 'See more';
+                if (!isExpanded && cardDescText) {
+                    cardDescText.scrollTop = 0;
+                }
+            });
+        }
+        if (vtuberModal) {
+            vtuberModal.addEventListener('click', (e) => {
+                if (e.target === vtuberModal) closeVtuberCard();
+            });
+        }
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && vtuberModal && vtuberModal.classList.contains('open')) {
+                closeVtuberCard();
+            }
         });
     }
 
@@ -574,9 +908,9 @@
             toggleBtn.className = 'kotoba-btn kotoba-btn-danger';
             toggleBtnIcon.textContent = '■';
             toggleBtnLabel.textContent = 'Stop Capture';
-            triggerPulse.classList.add('recording');
+            if (triggerBtn) triggerBtn.classList.add('recording');
         } else {
-            triggerPulse.classList.remove('recording');
+            if (triggerBtn) triggerBtn.classList.remove('recording');
             setTabAuthorized(isTabAuthorized);
         }
     }
@@ -586,9 +920,11 @@
         isBusy = true;
         try {
             const meta = extractYouTubeMetadata();
+            const selectedLang = langSelect ? langSelect.value : (localStorage.getItem('kotoba_selected_lang') || 'ja');
             chrome.runtime.sendMessage({
-                action: 'startTabCapture', lang: 'ja', model: 'nova-3',
-                title: meta.title, channel: meta.channel,
+                action: 'startTabCapture', lang: selectedLang, model: 'nova-3',
+                title: meta.title, channel: resolvedVtuberName || meta.channel,
+                channelLink: meta.channelLink || '',
                 videoId: currentVideoId || getVideoIdFromUrl(window.location.href)
             }, (res) => {
                 isBusy = false;

@@ -42,6 +42,94 @@ if gemini_client:
 else:
     print(">> [Init] GEMINI_API_KEY not found. Translations will be skipped.", flush=True)
 
+# --- VTuber Knowledge Base ---
+
+class VTuberKnowledgeBase:
+    def __init__(self, kb_dir: Path):
+        self.vtubers = []
+        self.offices = {}
+        vtubers_file = kb_dir / "vtubers.json"
+        offices_file = kb_dir / "offices.json"
+
+        if vtubers_file.exists():
+            try:
+                with open(vtubers_file, "r", encoding="utf-8") as f:
+                    self.vtubers = json.load(f)
+                print(f">> [Init] Loaded {len(self.vtubers)} VTuber records from {vtubers_file.name}", flush=True)
+            except Exception as e:
+                print(f"[Init Warning] Failed to load vtubers.json: {e}", flush=True)
+
+        if offices_file.exists():
+            try:
+                with open(offices_file, "r", encoding="utf-8") as f:
+                    offices_list = json.load(f)
+                    self.offices = {item["office_id"]: item.get("office_name", "") for item in offices_list if "office_id" in item}
+                print(f">> [Init] Loaded {len(self.offices)} office records from {offices_file.name}", flush=True)
+            except Exception as e:
+                print(f"[Init Warning] Failed to load offices.json: {e}", flush=True)
+
+    def get_office_name(self, office_id: int | None) -> str:
+        if office_id is None:
+            return ""
+        return self.offices.get(office_id, "")
+
+    def format_display_name(self, vtuber: dict | None, fallback: str = "") -> str:
+        """Format VTuber name syntax: 'english_name[ - kanji_name<if exists kanji_name>]' or original."""
+        if not vtuber:
+            return fallback
+        names = vtuber.get("vtuber_names", {})
+        eng = (names.get("english_name") or "").strip()
+        kanji = (names.get("kanji_name") or "").strip()
+        if eng and kanji:
+            return f"{eng} - {kanji}"
+        return eng or kanji or fallback
+
+    def lookup(self, channel_name: str = "", channel_link: str = "") -> dict | None:
+        if not self.vtubers:
+            return None
+
+        link_clean = (channel_link or "").strip().rstrip("/")
+        name_clean = (channel_name or "").strip()
+
+        # 1. Exact or partial match on channel_link
+        if link_clean:
+            for vt in self.vtubers:
+                for ch in vt.get("channels", []):
+                    cl = (ch.get("channel_link") or "").strip().rstrip("/")
+                    if cl and (cl == link_clean or cl in link_clean or link_clean in cl):
+                        return vt
+
+        # 2. Match on channel_name in channels list
+        if name_clean:
+            name_lower = name_clean.lower()
+            for vt in self.vtubers:
+                for ch in vt.get("channels", []):
+                    cn = (ch.get("channel_name") or "").strip().lower()
+                    if cn and (cn == name_lower or cn in name_lower or name_lower in cn):
+                        return vt
+
+            # 3. Match on kanji_name (exact substring, min 2 chars)
+            for vt in self.vtubers:
+                kanji = (vt.get("vtuber_names", {}).get("kanji_name") or "").strip()
+                if kanji and len(kanji) >= 2 and kanji in name_clean:
+                    return vt
+
+            # 4. Match on english_name (word boundary match, exclude generic words)
+            for vt in self.vtubers:
+                eng = (vt.get("vtuber_names", {}).get("english_name") or "").strip()
+                if eng and len(eng) >= 3 and eng.lower() not in ("unknown", "none", "null"):
+                    if eng.lower() == name_lower or re.search(r'\b' + re.escape(eng.lower()) + r'\b', name_lower):
+                        return vt
+
+        return None
+
+
+# Initialize knowledge base
+kb_dir = base_dir.parent / "dataset" / "kb"
+if not kb_dir.exists():
+    kb_dir = Path.cwd() / "dataset" / "kb"
+kb = VTuberKnowledgeBase(kb_dir)
+
 # --- Translation Schema ---
 
 class TranslationResponse(BaseModel):
@@ -52,11 +140,12 @@ class TranslationResponse(BaseModel):
 
 # --- Sentence Extraction ---
 
-def extract_sentences_and_remainder(text: str) -> tuple[list[str], str]:
-    """Extract complete sentences ending in Japanese/standard punctuation and return remainder."""
-    if not text:
-        return [], ""
-    pattern = r'([^。！？!?…\n]+[。！？!?…\n]+)'
+def extract_sentences_and_remainder(text: str, min_length: int = 200) -> tuple[list[str], str]:
+    """Extract complete sentences ending in punctuation only after reaching min_length (200 chars), returning remainder."""
+    if not text or len(text) < min_length:
+        return [], text
+    # Support English/European (.?!), Japanese/CJK (。！？…), Arabic (؟), Hindi (।), newlines, etc.
+    pattern = r'([^.?!。！？…\n|।؟]+[.?!。！？…\n|।؟]+)'
     matches = list(re.finditer(pattern, text))
     sentences = [m.group(1).strip() for m in matches if m.group(1).strip()]
     last_end = matches[-1].end() if matches else 0
@@ -68,7 +157,7 @@ def split_sentences(text: str) -> list[str]:
     text = text.strip()
     if not text:
         return []
-    sentences, remainder = extract_sentences_and_remainder(text)
+    sentences, remainder = extract_sentences_and_remainder(text, min_length=0)
     if remainder:
         sentences.append(remainder)
     return sentences if sentences else [text]
@@ -98,12 +187,27 @@ Guidelines:
 async def translate_japanese_stream(
     sentence_1: str, sentence_2: str = "", context_history: list[str] = None,
     stream_title: str = "", stream_channel: str = "", recent_chat: list[dict] = None,
+    vtuber_info: dict = None,
 ) -> tuple[str, int, int, str]:
     """Translate Japanese transcript to English. Returns (translation, sentences_consumed, relevant_comment_idx, relevant_comment_translation)."""
     if not gemini_client or not sentence_1.strip():
         return "", 1, 0, ""
 
     prompt_parts = []
+
+    # Streamer & VTuber Lore Context
+    if vtuber_info:
+        v_lines = []
+        eng = vtuber_info.get("vtuber_names", {}).get("english_name")
+        kanji = vtuber_info.get("vtuber_names", {}).get("kanji_name")
+        if eng or kanji:
+            v_lines.append(f"VTuber / Streamer: {eng or ''} ({kanji or ''})")
+        facts = vtuber_info.get("facts", [])
+        if facts:
+            v_lines.append("Key Facts & Lore: " + " ".join(facts[:3]))
+        if v_lines:
+            prompt_parts.append("Streamer Profile Context:\n" + "\n".join(v_lines))
+
     if stream_channel or stream_title:
         meta = []
         if stream_channel: meta.append(f"Channel / Speaker: {stream_channel}")
@@ -157,11 +261,35 @@ async def health_check():
         "ws_url": "ws://127.0.0.1:8000/listen",
         "deepgram_ready": bool(deepgram_api_key), "gemini_ready": bool(gemini_client),
         "translation_model": GEMINI_MODEL if gemini_client else "none",
+        "vtuber_database_count": len(kb.vtubers),
+    }
+
+
+@app.get("/api/vtuber/lookup")
+async def lookup_vtuber_endpoint(channel_name: str = "", channel_link: str = ""):
+    """Lookup a VTuber by channel name and/or channel link. Returns formatted display name, office, and facts."""
+    vt = kb.lookup(channel_name=channel_name, channel_link=channel_link)
+    display_name = kb.format_display_name(vt, fallback=channel_name)
+    office_id = vt.get("office_id") if vt else None
+    office_name = kb.get_office_name(office_id)
+    return {
+        "found": bool(vt),
+        "display_name": display_name,
+        "vtuber_id": vt.get("vtuber_id") if vt else None,
+        "vtuber_names": vt.get("vtuber_names", {}) if vt else {},
+        "office_id": office_id,
+        "office_name": office_name,
+        "facts": vt.get("facts", []) if vt else [],
+        "channels": vt.get("channels", []) if vt else [],
+        "description": vt.get("description", "") if vt else "",
     }
 
 
 @app.websocket("/listen")
-async def listen(websocket: WebSocket, language: str = "ja", model: str = "nova-3", title: str = "", channel: str = ""):
+async def listen(
+    websocket: WebSocket, language: str = "ja", model: str = "nova-3",
+    title: str = "", channel: str = "", channel_link: str = ""
+):
     await websocket.accept()
 
     sid = uuid.uuid4().hex[:8]
@@ -171,23 +299,34 @@ async def listen(websocket: WebSocket, language: str = "ja", model: str = "nova-
     pending_buffer: str = ""
     buffer_event = asyncio.Event()
 
+    # Match VTuber from Knowledge Base
+    matched_vtuber = kb.lookup(channel_name=channel, channel_link=channel_link)
+    display_channel_name = kb.format_display_name(matched_vtuber, fallback=channel)
+
+    req_lang = language.strip() if language else "ja"
+
     print(f"\n==========================================", flush=True)
-    print(f">> [Session {sid}] Connected | Channel: '{channel}' | Title: '{title}'", flush=True)
-    print(f">> STT: nova-3/ja | Translator: {GEMINI_MODEL if gemini_client else 'None'}", flush=True)
+    print(f">> [Session {sid}] Connected | Channel: '{display_channel_name}' | Title: '{title}'", flush=True)
+    if matched_vtuber:
+        print(f">> [VTuber Matched] ID: {matched_vtuber.get('vtuber_id')} -> {display_channel_name}", flush=True)
+    print(f">> STT: nova-3/{req_lang} | Translator: {GEMINI_MODEL if gemini_client else 'None'}", flush=True)
     print(f"==========================================", flush=True)
 
     try:
         await websocket.send_json({
-            "type": "status", "status": "connected", "model": "nova-3", "language": "ja",
+            "type": "status", "status": "connected", "model": "nova-3", "language": req_lang,
             "translation_ready": bool(gemini_client), "translation_model": GEMINI_MODEL if gemini_client else None,
+            "vtuber_found": bool(matched_vtuber),
+            "display_name": display_channel_name,
+            "vtuber_names": matched_vtuber.get("vtuber_names", {}) if matched_vtuber else {},
         })
     except Exception:
         pass
 
     dg_params = {
-        "model": "nova-3", "language": "ja", "punctuate": "true", "interim_results": "true",
+        "model": "nova-3", "language": req_lang, "punctuate": "true", "interim_results": "true",
         "smart_format": "true", "encoding": "linear16", "sample_rate": "16000",
-        "channels": "1", "endpointing": "300", "vad_events": "true",
+        "channels": "1", "endpointing": "300", "utterance_end_ms": "1000", "vad_events": "true",
     }
     dg_url = f"wss://api.deepgram.com/v1/listen?{urllib.parse.urlencode(dg_params)}"
 
@@ -229,6 +368,21 @@ async def listen(websocket: WebSocket, language: str = "ja", model: str = "nova-
 
             async def receive_transcripts():
                 nonlocal pending_buffer
+
+                async def flush_sentence(s: str, is_speech_final: bool = False):
+                    nonlocal sentence_buffer
+                    if not s.strip(): return
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    s_id = f"{int(time.time()*1000)}_{uuid.uuid4().hex[:4]}"
+                    print(f">> [Sentence] ({ts}): {s}", flush=True)
+                    try:
+                        await websocket.send_json({"type": "transcript", "id": s_id, "transcript": s, "is_final": True, "speech_final": is_speech_final, "time": ts})
+                    except Exception:
+                        pass
+                    sentence_buffer.append({"id": s_id, "text": s, "time": ts})
+                    if sentence_buffer:
+                        buffer_event.set()
+
                 try:
                     async for raw in dg_ws:
                         try:
@@ -236,8 +390,20 @@ async def listen(websocket: WebSocket, language: str = "ja", model: str = "nova-
                         except Exception:
                             continue
 
-                        if result.get("type") != "Results":
-                            if result.get("type") == "Error":
+                        msg_type = result.get("type")
+
+                        if msg_type == "UtteranceEnd":
+                            if pending_buffer.strip():
+                                await flush_sentence(pending_buffer.strip(), is_speech_final=True)
+                                pending_buffer = ""
+                                try:
+                                    await websocket.send_json({"type": "transcript", "transcript": "", "is_final": False, "speech_final": False})
+                                except Exception:
+                                    pass
+                            continue
+
+                        if msg_type != "Results":
+                            if msg_type == "Error":
                                 try: await websocket.send_json({"type": "error", "message": result.get("message", "Deepgram Error")})
                                 except Exception: pass
                             continue
@@ -253,21 +419,15 @@ async def listen(websocket: WebSocket, language: str = "ja", model: str = "nova-
                         speech_final = result.get("speech_final", False)
 
                         if is_final:
-                            ts = datetime.now().strftime("%H:%M:%S")
                             pending_buffer = f"{pending_buffer} {transcript}".strip() if pending_buffer else transcript.strip()
-                            completed, pending_buffer = extract_sentences_and_remainder(pending_buffer)
+                            completed, pending_buffer = extract_sentences_and_remainder(pending_buffer, min_length=200)
 
                             for s in completed:
-                                s_id = f"{int(time.time()*1000)}_{uuid.uuid4().hex[:4]}"
-                                print(f">> [Sentence] ({ts}): {s}", flush=True)
-                                try:
-                                    await websocket.send_json({"type": "transcript", "id": s_id, "transcript": s, "is_final": True, "speech_final": speech_final, "time": ts})
-                                except Exception:
-                                    pass
-                                sentence_buffer.append({"id": s_id, "text": s, "time": ts})
+                                await flush_sentence(s, is_speech_final=speech_final)
 
-                            if len(sentence_buffer) >= 2:
-                                buffer_event.set()
+                            if speech_final and pending_buffer.strip():
+                                await flush_sentence(pending_buffer.strip(), is_speech_final=True)
+                                pending_buffer = ""
 
                             if pending_buffer:
                                 try:
@@ -286,59 +446,72 @@ async def listen(websocket: WebSocket, language: str = "ja", model: str = "nova-
             async def process_translation_buffer():
                 try:
                     while True:
-                        while len(sentence_buffer) < 2:
+                        while not sentence_buffer:
                             buffer_event.clear()
                             await buffer_event.wait()
 
-                        while len(sentence_buffer) >= 2:
-                            s1, s2 = sentence_buffer[0], sentence_buffer[1]
-                            ctx = list(context_history[-10:])
-                            chat = list(live_chat_buffer[-10:])
+                        # If only 1 sentence is in the buffer, wait up to 5 seconds for a lookahead sentence before flushing
+                        if len(sentence_buffer) < 2:
+                            buffer_event.clear()
+                            try:
+                                await asyncio.wait_for(buffer_event.wait(), timeout=5.0)
+                            except asyncio.TimeoutError:
+                                pass
 
-                            if not gemini_client:
-                                del sentence_buffer[0]
-                                context_history.append(s1["text"])
-                                if len(context_history) > 50: del context_history[:-50]
-                                continue
+                        if not sentence_buffer:
+                            continue
 
-                            trans, consumed, rel_idx, rel_trans = await translate_japanese_stream(
-                                s1["text"], s2["text"], ctx, title, channel, chat
-                            )
+                        s1 = sentence_buffer[0]
+                        s2 = sentence_buffer[1] if len(sentence_buffer) >= 2 else None
+                        s2_text = s2["text"] if s2 else ""
+                        ctx = list(context_history[-10:])
+                        chat = list(live_chat_buffer[-10:])
 
-                            matched = None
-                            if rel_idx > 0 and rel_idx <= len(chat):
-                                c = chat[rel_idx - 1]
-                                matched = {
-                                    "id": c.get("id"), "author": c.get("author", "Viewer"),
-                                    "message": c.get("message", ""),
-                                    "translation": rel_trans or c.get("message", ""),
-                                    "time": c.get("time", ""), "index": rel_idx,
-                                }
-
-                            consumed = max(1, min(consumed, len(sentence_buffer)))
-                            items = sentence_buffer[:consumed]
-                            del sentence_buffer[:consumed]
-
-                            for it in items:
-                                context_history.append(it["text"])
+                        if not gemini_client:
+                            del sentence_buffer[0]
+                            context_history.append(s1["text"])
                             if len(context_history) > 50: del context_history[:-50]
+                            continue
 
-                            if trans:
-                                original = " ".join([it["text"] for it in items])
-                                ts = datetime.now().strftime("%H:%M:%S")
-                                rel_info = f" | #{rel_idx} [{matched['author']}: {matched['message']}]" if matched else ""
-                                print(f">> [Translation] ({ts}) [{consumed}s]{rel_info}: {original} → {trans}", flush=True)
-                                try:
-                                    await websocket.send_json({
-                                        "type": "translation", "id": items[-1]["id"],
-                                        "ids": [it["id"] for it in items],
-                                        "original": original, "original_items": items,
-                                        "translation": trans, "sentences": consumed,
-                                        "relevant_comment_index": rel_idx, "relevant_comment": matched,
-                                        "model": GEMINI_MODEL, "time": ts,
-                                    })
-                                except Exception:
-                                    pass
+                        trans, consumed, rel_idx, rel_trans = await translate_japanese_stream(
+                            s1["text"], s2_text, ctx, title, display_channel_name, chat,
+                            vtuber_info=matched_vtuber,
+                        )
+
+                        matched = None
+                        if rel_idx > 0 and rel_idx <= len(chat):
+                            c = chat[rel_idx - 1]
+                            matched = {
+                                "id": c.get("id"), "author": c.get("author", "Viewer"),
+                                "message": c.get("message", ""),
+                                "translation": rel_trans or c.get("message", ""),
+                                "time": c.get("time", ""), "index": rel_idx,
+                            }
+
+                        consumed = max(1, min(consumed, len(sentence_buffer)))
+                        items = sentence_buffer[:consumed]
+                        del sentence_buffer[:consumed]
+
+                        for it in items:
+                            context_history.append(it["text"])
+                        if len(context_history) > 50: del context_history[:-50]
+
+                        if trans:
+                            original = " ".join([it["text"] for it in items])
+                            ts = datetime.now().strftime("%H:%M:%S")
+                            rel_info = f" | #{rel_idx} [{matched['author']}: {matched['message']}]" if matched else ""
+                            print(f">> [Translation] ({ts}) [{consumed}s]{rel_info}: {original} → {trans}", flush=True)
+                            try:
+                                await websocket.send_json({
+                                    "type": "translation", "id": items[-1]["id"],
+                                    "ids": [it["id"] for it in items],
+                                    "original": original, "original_items": items,
+                                    "translation": trans, "sentences": consumed,
+                                    "relevant_comment_index": rel_idx, "relevant_comment": matched,
+                                    "model": GEMINI_MODEL, "time": ts,
+                                })
+                            except Exception:
+                                pass
                 except (asyncio.CancelledError, WebSocketDisconnect):
                     pass
 

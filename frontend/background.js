@@ -117,7 +117,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     chrome.runtime.sendMessage({
                         target: 'offscreen',
                         action: 'start',
-                        data: { streamId, targetTabId: tabId, lang: 'ja', model: 'nova-3', title: message.title || '', channel: message.channel || '' }
+                        data: { streamId, targetTabId: tabId, lang: message.lang || 'ja', model: message.model || 'nova-3', title: message.title || '', channel: message.channel || '', channelLink: message.channelLink || '' }
                     }, () => { sendResponse({ success: true, streamId }); });
                 });
             } catch (err) {

@@ -9,6 +9,14 @@ const forceCloseBtn = document.getElementById('force-close-btn');
 const clearBtn = document.getElementById('clear-btn');
 const copyTranscriptsBtn = document.getElementById('copy-transcripts-btn');
 const copyTranslationBtn = document.getElementById('copy-translation-btn');
+const langSelect = document.getElementById('lang-select');
+if (langSelect) {
+    const savedLang = localStorage.getItem('kotoba_selected_lang');
+    if (savedLang) langSelect.value = savedLang;
+    langSelect.addEventListener('change', () => {
+        localStorage.setItem('kotoba_selected_lang', langSelect.value);
+    });
+}
 
 const ytInfoPlaceholder = document.getElementById('yt-info-placeholder');
 const ytInfoContent = document.getElementById('yt-info-content');
@@ -33,9 +41,23 @@ const charCount = document.getElementById('char-count');
 const toast = document.getElementById('toast');
 const footerServer = document.querySelector('.footer-server');
 
+// --- Modal Elements ---
+const vtuberModal = document.getElementById('vtuber-modal');
+const modalAvatarWrap = document.getElementById('modal-card-avatar-wrap');
+const modalAvatarImg = document.getElementById('modal-card-avatar-img');
+const modalNameEl = document.getElementById('modal-card-name');
+const modalOfficeEl = document.getElementById('modal-card-office');
+const modalFactsList = document.getElementById('modal-card-facts');
+const modalCloseBtn = document.getElementById('modal-card-close');
+const modalDescWrap = document.getElementById('modal-card-desc-wrap');
+const modalDescText = document.getElementById('modal-card-desc-text');
+const modalSeeMoreBtn = document.getElementById('modal-card-see-more-btn');
+
 // --- State ---
 
 let currentTargetTabId = null;
+let lastTargetTabMeta = null;
+let lastVtuberProfile = null;
 let transcriptItems = [];
 let translationItems = [];
 let errorItems = [];
@@ -50,10 +72,16 @@ function escapeHtml(str) {
               .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+let toastTimeout = null;
 function showToast(message) {
+    if (!toast) return;
     toast.textContent = message;
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3000);
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+        toastTimeout = null;
+    }, 3000);
 }
 
 function scrollTranscriptsToBottom() {
@@ -121,43 +149,54 @@ function inPageMetadataExtractor() {
         }
 
         let channel = '';
+        let channelLink = '';
         const channelEl = document.querySelector(
             'ytd-video-owner-renderer ytd-channel-name yt-formatted-string#text a, ' +
-            'ytd-video-owner-renderer ytd-channel-name yt-formatted-string a, ' +
+            'ytd-video-owner-renderer ytd-channel-name a, ' +
             '#owner ytd-channel-name #text a, ' +
-            '#owner #channel-name #text a, ' +
-            'ytd-channel-name yt-formatted-string#text a, ' +
             '#owner #channel-name a, ' +
-            'ytd-channel-name yt-formatted-string a, ' +
             '#upload-info #channel-name a, ' +
-            '#owner-name a, ' +
-            'ytd-video-owner-renderer #channel-name a, ' +
-            '#text.ytd-channel-name a, ' +
-            'ytd-channel-name a, ' +
-            '#channel-name'
+            'ytd-channel-name a'
         );
-        if (channelEl && channelEl.textContent && channelEl.textContent.trim()) {
-            const raw = channelEl.textContent.trim();
-            let s = raw.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean)[0] || '';
-            s = s.trim().replace(/\s*•\s*[\d.]+[KMB]?\s*subscribers.*$/i, '').trim();
-            if (s.length >= 4 && s.length % 2 === 0 && s.slice(0, s.length / 2) === s.slice(s.length / 2)) {
-                s = s.slice(0, s.length / 2).trim();
+        if (channelEl) {
+            if (channelEl.textContent && channelEl.textContent.trim()) {
+                const raw = channelEl.textContent.trim();
+                let s = raw.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean)[0] || '';
+                s = s.trim().replace(/\s*•\s*[\d.]+[KMB]?\s*subscribers.*$/i, '').trim();
+                if (s.length >= 4 && s.length % 2 === 0 && s.slice(0, s.length / 2) === s.slice(s.length / 2)) {
+                    s = s.slice(0, s.length / 2).trim();
+                }
+                const words = s.split(/\s+/);
+                if (words.length >= 2 && words.length % 2 === 0 && words.slice(0, words.length / 2).join(' ') === words.slice(words.length / 2).join(' ')) {
+                    s = words.slice(0, words.length / 2).join(' ');
+                }
+                channel = s;
             }
-            const words = s.split(/\s+/);
-            if (words.length >= 2 && words.length % 2 === 0 && words.slice(0, words.length / 2).join(' ') === words.slice(words.length / 2).join(' ')) {
-                s = words.slice(0, words.length / 2).join(' ');
+            const h = channelEl.href || (channelEl.getAttribute && channelEl.getAttribute('href'));
+            if (h && !h.startsWith('javascript:')) {
+                try { channelLink = new URL(h, window.location.origin).href; } catch(e){}
             }
-            channel = s;
+        }
+        if (!channelLink) {
+            const linkEl = document.querySelector(
+                'ytd-video-owner-renderer a#avatar, ' +
+                '#owner a#avatar, ' +
+                '#owner a[href*="/@"], ' +
+                '#owner a[href*="/channel/"], ' +
+                'ytd-video-owner-renderer a[href*="/@"], ' +
+                'ytd-video-owner-renderer a[href*="/channel/"]'
+            );
+            if (linkEl) {
+                const h = linkEl.href || (linkEl.getAttribute && linkEl.getAttribute('href'));
+                if (h && !h.startsWith('javascript:')) {
+                    try { channelLink = new URL(h, window.location.origin).href; } catch(e) { channelLink = h; }
+                }
+            }
         }
         if (!channel) {
-            const metaAuthor = document.querySelector('link[itemprop="name"]');
-            if (metaAuthor && metaAuthor.getAttribute('content')) {
-                channel = metaAuthor.getAttribute('content').trim();
-            } else {
-                const metaName = document.querySelector('meta[name="author"], meta[property="og:video:actor"]');
-                if (metaName && (metaName.content || metaName.getAttribute('content'))) {
-                    channel = (metaName.content || metaName.getAttribute('content')).trim();
-                }
+            const mn = document.querySelector('meta[name="author"], meta[property="og:video:actor"]');
+            if (mn && (mn.content || mn.getAttribute('content'))) {
+                channel = (mn.content || mn.getAttribute('content')).trim();
             }
         }
 
@@ -175,10 +214,11 @@ function inPageMetadataExtractor() {
             status: isLive ? 'LIVE' : 'PLAYBACK',
             title: title || document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Stream',
             channel: channel || 'YouTube Channel',
+            channelLink: channelLink || '',
             url: href
         };
     } catch (e) {
-        return { isYouTube: true, status: 'PLAYBACK', title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video', channel: 'YouTube Channel', url: window.location.href };
+        return { isYouTube: true, status: 'PLAYBACK', title: document.title.replace(/\s*-\s*YouTube$/, '').trim() || 'YouTube Video', channel: 'YouTube Channel', channelLink: '', url: window.location.href };
     }
 }
 
@@ -205,7 +245,8 @@ async function updateSelectedTabInfo(tabId) {
                     meta = {
                         isYouTube: isYT, status: 'PLAYBACK',
                         title: (tab.title || '').replace(/\s*-\s*YouTube$/, '').trim() || 'Media Playback',
-                        channel: isYT ? 'YouTube' : (tab.url ? new URL(tab.url).hostname.replace(/^www\./, '') : 'Webpage')
+                        channel: isYT ? 'YouTube' : (tab.url ? new URL(tab.url).hostname.replace(/^www\./, '') : 'Webpage'),
+                        channelLink: ''
                     };
                 }
             } catch (e) {}
@@ -227,12 +268,145 @@ async function updateSelectedTabInfo(tabId) {
             ytBadgeStatus.className = 'yt-badge-status playback';
             ytBadgeStatus.textContent = 'PLAYBACK';
         }
-        ytChannelName.textContent = meta.channel || 'Media Channel';
+
+        lastTargetTabMeta = meta;
+
+        let displayChannel = meta.channel || 'Media Channel';
+        if (meta.channel || meta.channelLink) {
+            try {
+                const query = new URLSearchParams({ channel_name: meta.channel || '', channel_link: meta.channelLink || '' });
+                const res = await fetch(`http://127.0.0.1:8000/api/vtuber/lookup?${query.toString()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data) {
+                        lastVtuberProfile = data;
+                        if (data.display_name) displayChannel = data.display_name;
+                        if (!meta.channelLink && data.channels?.[0]?.channel_link) {
+                            lastTargetTabMeta.channelLink = data.channels[0].channel_link;
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
+        ytChannelName.textContent = displayChannel;
         ytVideoTitle.textContent = meta.title || 'Media Stream';
     } catch (err) {
         if (ytInfoPlaceholder) ytInfoPlaceholder.style.display = 'flex';
         if (ytInfoContent) ytInfoContent.style.display = 'none';
     }
+}
+
+function inPageAvatarExtractor() {
+    const selectors = [
+        '#owner #avatar img',
+        'ytd-video-owner-renderer #avatar img',
+        '#owner yt-img-shadow img',
+        'ytd-channel-name img',
+        '#avatar img',
+        '#owner img',
+        'img.yt-core-image[src*="yt3.ggpht.com"]'
+    ];
+    for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el && el.src && !el.src.includes('data:image/svg')) {
+            return el.src;
+        }
+    }
+    return '';
+}
+
+async function openVtuberModal() {
+    if (!vtuberModal) return;
+
+    // Refresh metadata so channelLink and profile are current
+    if (currentTargetTabId) await updateSelectedTabInfo(currentTargetTabId);
+
+    let avatarSrc = 'icons/256.png';
+    if (currentTargetTabId) {
+        try {
+            const results = await chrome.scripting.executeScript({
+                target: { tabId: Number(currentTargetTabId) },
+                func: inPageAvatarExtractor
+            });
+            if (results && results[0] && results[0].result) avatarSrc = results[0].result;
+        } catch (e) {}
+    }
+
+    if (modalAvatarImg) modalAvatarImg.src = avatarSrc;
+    if (modalAvatarWrap) {
+        modalAvatarWrap.onclick = (e) => {
+            e.stopPropagation();
+            const targetUrl = lastTargetTabMeta?.channelLink;
+            if (targetUrl) window.open(targetUrl, '_blank');
+        };
+    }
+
+    let profile = lastVtuberProfile;
+    if (!profile && lastTargetTabMeta) {
+        try {
+            const query = new URLSearchParams({
+                channel_name: lastTargetTabMeta.channel || '',
+                channel_link: lastTargetTabMeta.channelLink || ''
+            });
+            const res = await fetch(`http://127.0.0.1:8000/api/vtuber/lookup?${query.toString()}`);
+            if (res.ok) {
+                profile = await res.json();
+                lastVtuberProfile = profile;
+            }
+        } catch (e) {}
+    }
+
+    if (modalNameEl) {
+        modalNameEl.textContent = profile?.display_name || lastTargetTabMeta?.channel || 'Channel Name';
+    }
+
+    if (modalOfficeEl) {
+        if (profile && profile.office_name) {
+            modalOfficeEl.textContent = profile.office_name;
+            modalOfficeEl.style.display = 'inline-flex';
+        } else {
+            modalOfficeEl.style.display = 'none';
+        }
+    }
+
+    if (modalFactsList) {
+        modalFactsList.innerHTML = '';
+        if (profile && profile.facts && profile.facts.length > 0) {
+            profile.facts.forEach(fact => {
+                const li = document.createElement('li');
+                li.className = 'modal-card-fact-item';
+                li.textContent = fact;
+                modalFactsList.appendChild(li);
+            });
+        } else {
+            const li = document.createElement('li');
+            li.className = 'modal-card-empty-state';
+            li.textContent = 'No extra database facts found for this channel.';
+            modalFactsList.appendChild(li);
+        }
+    }
+
+    if (modalDescWrap && modalDescText) {
+        const desc = (profile?.description || '').trim();
+        if (desc) {
+            modalDescText.textContent = desc;
+            modalDescWrap.style.display = 'block';
+            modalDescWrap.classList.remove('expanded');
+            if (modalSeeMoreBtn) {
+                modalSeeMoreBtn.textContent = 'See more';
+                modalSeeMoreBtn.style.display = desc.length > 50 || desc.includes('\n') ? 'inline-block' : 'none';
+            }
+        } else {
+            modalDescWrap.style.display = 'none';
+        }
+    }
+
+    vtuberModal.classList.add('open');
+}
+
+function closeVtuberModal() {
+    if (vtuberModal) vtuberModal.classList.remove('open');
 }
 
 async function resolveInitialTargetTab() {
@@ -508,6 +682,14 @@ async function init() {
 
         renderAllPanes();
         await resolveInitialTargetTab();
+
+        if (chrome.tabs?.onUpdated) {
+            chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+                if (tabId === currentTargetTabId && (changeInfo.url || changeInfo.title)) {
+                    updateSelectedTabInfo(currentTargetTabId);
+                }
+            });
+        }
     } catch (e) {
         console.error('Init error:', e);
     }
@@ -529,8 +711,9 @@ toggleBtn.addEventListener('click', async (event) => {
         updateStatusUI('connecting');
         btnLabel.textContent = 'Connecting...';
 
+        const selectedLang = langSelect ? langSelect.value : (localStorage.getItem('kotoba_selected_lang') || 'ja');
         chrome.runtime.sendMessage({
-            action: 'startTabCapture', tabId: currentTargetTabId, lang: 'ja', model: 'nova-3',
+            action: 'startTabCapture', tabId: currentTargetTabId, lang: selectedLang, model: 'nova-3',
             title: ytVideoTitle ? ytVideoTitle.textContent.trim() : '',
             channel: ytChannelName ? ytChannelName.textContent.trim() : ''
         }, (res) => {
@@ -574,6 +757,41 @@ clearBtn.addEventListener('click', async () => {
     liveBubble.style.display = 'none';
     renderAllPanes();
     showToast('Cleared all items');
+});
+
+// --- VTuber Modal Event Listeners ---
+if (ytChannelName) {
+    ytChannelName.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openVtuberModal();
+    });
+}
+if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeVtuberModal();
+    });
+}
+if (modalSeeMoreBtn) {
+    modalSeeMoreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!modalDescWrap) return;
+        const isExpanded = modalDescWrap.classList.toggle('expanded');
+        modalSeeMoreBtn.textContent = isExpanded ? 'See less' : 'See more';
+        if (!isExpanded && modalDescText) {
+            modalDescText.scrollTop = 0;
+        }
+    });
+}
+if (vtuberModal) {
+    vtuberModal.addEventListener('click', (e) => {
+        if (e.target === vtuberModal) closeVtuberModal();
+    });
+}
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && vtuberModal && vtuberModal.classList.contains('open')) {
+        closeVtuberModal();
+    }
 });
 
 init();

@@ -85,71 +85,73 @@
     right: 24px;
     z-index: var(--z-trigger);
     display: none;
-    align-items: center;
-    gap: 8px;
-    background: #09090b;
-    color: #ffffff;
-    border: 1px solid var(--border-highlight);
-    border-radius: 24px;
-    padding: 10px 18px;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: #09090b;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border: 2px solid var(--border-highlight);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 10px rgba(250, 204, 21, 0.25);
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(250, 204, 21, 0.2);
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
+    padding: 0;
+    overflow: hidden;
+    transform: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, opacity 0.2s ease;
 }
 
 #kotoba-trigger-btn:hover {
-    transform: translateY(-2px) scale(1.04);
+    transform: none;
     border-color: var(--color-yellow);
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7), 0 0 20px rgba(250, 204, 21, 0.35);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7), 0 0 14px rgba(250, 204, 21, 0.45);
 }
 
 #kotoba-trigger-btn:active {
-    transform: translateY(0) scale(0.98);
+    transform: none;
 }
 
-#kotoba-trigger-btn.unauthorized {
-    background: #121216;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #a1a1aa;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+/* Streaming audio: slight red shade and active pulse glow */
+#kotoba-trigger-btn.recording {
+    border-color: #ef4444;
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.6), 0 4px 16px rgba(0, 0, 0, 0.7);
+    animation: kotobaRecordingGlow 1.8s infinite alternate ease-in-out;
 }
 
-#kotoba-trigger-btn.unauthorized .kotoba-btn-pulse {
-    background-color: var(--status-unauth);
-    box-shadow: 0 0 6px var(--status-unauth);
-}
-
-#kotoba-trigger-btn.unauthorized:hover {
-    transform: translateY(-1px);
-    background: #18181b;
-    color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.3);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
-}
-
-.kotoba-btn-pulse {
-    width: 8px;
-    height: 8px;
+#kotoba-trigger-btn.recording::after {
+    content: '';
+    position: absolute;
+    inset: 0;
     border-radius: 50%;
-    background-color: var(--status-ready);
-    box-shadow: 0 0 8px var(--status-ready);
-    display: inline-block;
+    background: rgba(239, 68, 68, 0.28);
+    pointer-events: none;
 }
 
-.kotoba-btn-pulse.recording {
-    background-color: var(--status-live);
-    box-shadow: 0 0 10px var(--status-live);
-    animation: kotobaPulse 1.2s infinite;
+@keyframes kotobaRecordingGlow {
+    0% {
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.35), 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+    100% {
+        box-shadow: 0 0 18px rgba(239, 68, 68, 0.8), 0 6px 20px rgba(0, 0, 0, 0.8);
+    }
 }
 
-@keyframes kotobaPulse {
-    0% { transform: scale(0.95); opacity: 0.8; }
-    50% { transform: scale(1.3); opacity: 1; }
-    100% { transform: scale(0.95); opacity: 0.8; }
+/* Inactive / unauthorized tab: grey shade and disabled state */
+#kotoba-trigger-btn.unauthorized,
+#kotoba-trigger-btn[disabled] {
+    filter: grayscale(1) opacity(0.5);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    cursor: not-allowed;
+    transform: none;
+}
+
+#kotoba-trigger-btn.unauthorized:hover,
+#kotoba-trigger-btn[disabled]:hover {
+    transform: none;
+    filter: grayscale(0.8) opacity(0.7);
+    border-color: rgba(255, 255, 255, 0.35);
 }
 
 /* ==================== Overlay Panel ==================== */
@@ -274,14 +276,13 @@
     min-width: 0;
 }
 
-.kotoba-logo-title {
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
-    background: var(--logo-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+.kotoba-logo-img {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    object-fit: contain;
     flex-shrink: 0;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
 .kotoba-header-info {
@@ -292,10 +293,11 @@
     overflow: hidden;
 }
 
-.kotoba-header-top-row {
+.kotoba-header-bottom-row {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
 }
 
 .kotoba-badge-status {
@@ -340,6 +342,12 @@
     opacity: 0.9;
 }
 
+.kotoba-header-channel-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
 .kotoba-channel-name {
     font-size: 11px;
     font-weight: 700;
@@ -347,6 +355,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 100%;
 }
 
 .kotoba-video-title {
@@ -356,6 +366,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.2;
+    flex: 1;
+    min-width: 0;
 }
 
 .kotoba-header-actions {
@@ -660,12 +672,39 @@
     text-transform: uppercase;
 }
 
+.kotoba-pane-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .kotoba-pane-badge {
     background: rgba(255, 255, 255, 0.08);
     padding: 1px 4px;
     border-radius: 3px;
     font-size: 8px;
     color: var(--text-secondary);
+}
+
+.kotoba-pane-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1;
+}
+
+.kotoba-pane-icon-btn:hover {
+    background: rgba(250, 204, 21, 0.18);
+    border-color: var(--border-highlight);
+    color: var(--color-yellow);
+    transform: translateY(-1px);
 }
 
 .kotoba-feed-scroll {
@@ -796,4 +835,337 @@
 .kotoba-toast.show {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
+}
+
+/* ==================== VTuber Profile Modal Card ==================== */
+
+.kotoba-channel-clickable {
+    cursor: pointer !important;
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1), text-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    background: transparent !important;
+    padding: 0;
+    margin: 0;
+    display: inline;
+}
+
+.kotoba-channel-clickable:hover {
+    color: #facc15 !important;
+    text-shadow: 0 0 10px rgba(250, 204, 21, 0.7);
+    background: transparent !important;
+}
+
+.kotoba-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.kotoba-modal-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.kotoba-card {
+    position: relative;
+    background: #08080a;
+    border: 1px solid rgba(250, 204, 21, 0.50);
+    box-shadow: 0 0 35px rgba(250, 204, 21, 0.25), 0 20px 50px rgba(0, 0, 0, 0.95);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 440px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.92) translateY(10px);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    color: #ffffff;
+    font-family: var(--font-main);
+}
+
+.kotoba-modal-backdrop.open .kotoba-card {
+    transform: scale(1) translateY(0);
+}
+
+.kotoba-card-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #a1a1aa;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.kotoba-card-close:hover {
+    background: rgba(250, 204, 21, 0.2);
+    border-color: #facc15;
+    color: #facc15;
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+}
+
+.kotoba-card-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kotoba-card-avatar-wrap {
+    position: relative;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 2px solid rgba(250, 204, 21, 0.55);
+    box-shadow: 0 0 16px rgba(250, 204, 21, 0.25);
+    cursor: pointer;
+    background: #18181b;
+}
+
+.kotoba-card-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kotoba-card-avatar-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.kotoba-card-avatar-wrap:hover .kotoba-card-avatar-overlay {
+    opacity: 1;
+}
+
+.kotoba-card-avatar-wrap:hover .kotoba-card-avatar-img {
+    transform: scale(1.08);
+    filter: brightness(0.75);
+}
+
+.kotoba-card-avatar-icon {
+    width: 26px;
+    height: 26px;
+    color: #facc15;
+    display: block;
+    filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.8));
+    transform: scale(0.85);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.25s ease;
+}
+
+.kotoba-card-avatar-wrap:hover .kotoba-card-avatar-icon {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.95));
+}
+
+.kotoba-card-info {
+    flex: 1;
+    min-width: 0;
+    padding-right: 24px;
+}
+
+.kotoba-card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1.35;
+    word-break: break-word;
+    margin-bottom: 6px;
+}
+
+.kotoba-card-office {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(250, 204, 21, 0.12);
+    border: 1px solid rgba(250, 204, 21, 0.4);
+    color: #facc15;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 12px;
+}
+
+/* Card Description Section (Top Part) */
+.kotoba-card-desc-container {
+    margin-top: 6px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: #a1a1aa;
+}
+
+.kotoba-card-desc-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    white-space: pre-line;
+    transition: all 0.25s ease;
+}
+
+.kotoba-card-desc-container.expanded .kotoba-card-desc-text {
+    -webkit-line-clamp: unset;
+    display: block;
+    max-height: 130px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.kotoba-card-desc-text::-webkit-scrollbar {
+    width: 3px;
+}
+.kotoba-card-desc-text::-webkit-scrollbar-thumb {
+    background: rgba(250, 204, 21, 0.35);
+    border-radius: 2px;
+}
+
+.kotoba-card-see-more-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: 2px;
+    color: #facc15;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-block;
+    transition: all 0.2s ease;
+}
+
+.kotoba-card-see-more-btn:hover {
+    color: #fde047;
+    text-decoration: underline;
+}
+
+.kotoba-card-body {
+    padding: 18px 24px 22px;
+    overflow-y: auto;
+    max-height: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.kotoba-card-body::-webkit-scrollbar {
+    width: 4px;
+}
+.kotoba-card-body::-webkit-scrollbar-thumb {
+    background: rgba(250, 204, 21, 0.35);
+    border-radius: 2px;
+}
+
+.kotoba-card-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #a1a1aa;
+    margin-bottom: 2px;
+}
+
+.kotoba-card-facts-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.kotoba-card-fact-item {
+    position: relative;
+    padding-left: 14px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #d4d4d8;
+}
+
+.kotoba-card-fact-item::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #facc15;
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.kotoba-card-empty-state {
+    font-size: 12px;
+    color: #71717a;
+    font-style: italic;
+    padding: 6px 0;
+}
+
+/* ==================== Channel Name Hover Card ==================== */
+
+.kotoba-channel-hover-card {
+    position: fixed;
+    z-index: 2147483647;
+    pointer-events: none;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: rgba(12, 12, 16, 0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-highlight);
+    border-radius: 8px;
+    padding: 5px 10px 5px 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75), 0 0 12px rgba(250, 204, 21, 0.2);
+    animation: kotobaHoverCardFadeIn 0.15s ease-out;
+    transform: translateY(0);
+}
+
+.kotoba-channel-hover-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--color-yellow);
+    flex-shrink: 0;
+}
+
+.kotoba-channel-hover-guide {
+    font-size: 11px;
+    font-weight: 600;
+    color: #ffffff;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+}
+
+@keyframes kotobaHoverCardFadeIn {
+    0% { opacity: 0; transform: scale(0.96) translateY(2px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
 }

@@ -40,11 +40,13 @@
                     <span class="yt-placeholder-text">Detecting active stream / tab details...</span>
                 </div>
                 <div class="yt-info-content" id="yt-info-content" style="display: none;">
-                    <div class="yt-info-badges">
-                        <span class="yt-badge-status" id="yt-badge-status">LIVE</span>
-                        <span class="yt-channel-name" id="yt-channel-name">Channel Name</span>
+                    <div class="yt-info-channel-row">
+                        <span class="yt-channel-name yt-channel-clickable" id="yt-channel-name" title="Click to view VTuber Profile">Channel Name</span>
                     </div>
-                    <div class="yt-video-title" id="yt-video-title">Stream / Video Title</div>
+                    <div class="yt-info-title-row">
+                        <span class="yt-badge-status" id="yt-badge-status">LIVE</span>
+                        <span class="yt-video-title" id="yt-video-title">Stream / Video Title</span>
+                    </div>
                 </div>
             </div>
 
@@ -55,6 +57,33 @@
                         <span class="btn-icon" id="btn-icon">▶</span>
                         <span class="btn-label" id="btn-label">Start Capture</span>
                     </button>
+                    <select class="control-select" id="lang-select" title="Speech Recognition Language">
+                        <option value="ja" selected>Japanese (日本語)</option>
+                        <option value="en">English</option>
+                        <option value="zh">Chinese - Simplified (简体中文)</option>
+                        <option value="zh-TW">Chinese - Traditional (繁體中文)</option>
+                        <option value="zh-HK">Cantonese (廣東話)</option>
+                        <option value="ko">Korean (한국어)</option>
+                        <option value="es">Spanish (Español)</option>
+                        <option value="fr">French (Français)</option>
+                        <option value="de">German (Deutsch)</option>
+                        <option value="it">Italian (Italiano)</option>
+                        <option value="pt">Portuguese (Português)</option>
+                        <option value="ru">Russian (Русский)</option>
+                        <option value="hi">Hindi (हिन्दी)</option>
+                        <option value="id">Indonesian (Bahasa)</option>
+                        <option value="th">Thai (ไทย)</option>
+                        <option value="vi">Vietnamese (Tiếng Việt)</option>
+                        <option value="tl">Tagalog (Filipino)</option>
+                        <option value="tr">Turkish (Türkçe)</option>
+                        <option value="ar">Arabic (العربية)</option>
+                        <option value="nl">Dutch (Nederlands)</option>
+                        <option value="no">Norwegian (Norsk)</option>
+                        <option value="pl">Polish (Polski)</option>
+                        <option value="sv">Swedish (Svenska)</option>
+                        <option value="uk">Ukrainian (Українська)</option>
+                        <option value="multi">Multilingual (Auto)</option>
+                    </select>
                     <button class="btn btn-secondary" id="force-close-btn" title="Force disconnect and release audio stream">
                         <span class="btn-icon">⏹</span>
                         <span class="btn-label">Close Stream</span>
@@ -82,8 +111,8 @@
                         <span class="pane-badge" id="transcripts-count-badge">0 sentences</span>
                         <button class="pane-icon-btn" id="copy-transcripts-btn" title="Copy Japanese Transcripts">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                <rect x="8.5" y="8.5" width="12" height="12" rx="3"></rect>
+                                <path d="M4.5 15.5C3.94772 15.5 3.5 15.0523 3.5 14.5V5.5C3.5 4.39543 4.39543 3.5 5.5 3.5H14.5C15.0523 3.5 15.5 3.94772 15.5 4.5"></path>
                             </svg>
                         </button>
                     </div>
@@ -126,8 +155,8 @@
                         <span class="pane-badge highlight" id="translation-count-badge">0 translations</span>
                         <button class="pane-icon-btn" id="copy-translation-btn" title="Copy English Translations">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                <rect x="8.5" y="8.5" width="12" height="12" rx="3"></rect>
+                                <path d="M4.5 15.5C3.94772 15.5 3.5 15.0523 3.5 14.5V5.5C3.5 4.39543 4.39543 3.5 5.5 3.5H14.5C15.0523 3.5 15.5 3.94772 15.5 4.5"></path>
                             </svg>
                         </button>
                     </div>
@@ -156,6 +185,37 @@
             <span id="char-count">0 items recorded</span>
             <span class="footer-server">● Server Online</span>
         </footer>
+    </div>
+
+    <!-- VTuber Profile Modal -->
+    <div class="modal-backdrop" id="vtuber-modal">
+        <div class="modal-card">
+            <button class="modal-card-close" id="modal-card-close" title="Close">✕</button>
+            <div class="modal-card-header">
+                <div class="modal-card-avatar-wrap" id="modal-card-avatar-wrap" title="Visit Channel">
+                    <img class="modal-card-avatar-img" id="modal-card-avatar-img" src="icons/256.png" alt="Avatar">
+                    <div class="modal-card-avatar-overlay">
+                        <svg class="modal-card-avatar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M10.0002 5H8.2002C7.08009 5 6.51962 5 6.0918 5.21799C5.71547 5.40973 5.40973 5.71547 5.21799 6.0918C5 6.51962 5 7.08009 5 8.2002V15.8002C5 16.9203 5 17.4801 5.21799 17.9079C5.40973 18.2842 5.71547 18.5905 6.0918 18.7822C6.5192 19 7.07899 19 8.19691 19H15.8031C16.921 19 17.48 19 17.9074 18.7822C18.2837 18.5905 18.5905 18.2839 18.7822 17.9076C19 17.4802 19 16.921 19 15.8031V14M20 9V4M20 4H15M20 4L13 11" stroke="#facc15" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="modal-card-info">
+                    <div class="modal-card-title" id="modal-card-name">Channel Name</div>
+                    <div class="modal-card-office" id="modal-card-office" style="display: none;"></div>
+                    <div class="modal-card-desc-container" id="modal-card-desc-wrap" style="display: none;">
+                        <div class="modal-card-desc-text" id="modal-card-desc-text"></div>
+                        <button class="modal-card-see-more-btn" id="modal-card-see-more-btn">See more</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-card-body">
+                <div class="modal-card-section-title">Knowledge Base &amp; Facts</div>
+                <ul class="modal-card-facts-list" id="modal-card-facts">
+                    <li class="modal-card-empty-state">No extra database facts found for this channel.</li>
+                </ul>
+            </div>
+        </div>
     </div>
 
     <!-- Notification Toast -->
