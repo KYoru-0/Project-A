@@ -2,6 +2,10 @@
    Project KOTOBA - In-Page Overlay Theme (Black, White, Yellow)
    ============================================================================= */
 
+:host, :root, .kotoba-wrapper, *, *::before, *::after {
+    box-sizing: border-box;
+}
+
 :host, :root, .kotoba-wrapper {
     all: initial;
 
@@ -161,6 +165,7 @@
    ============================================================================= */
 
 #kotoba-overlay-panel {
+    box-sizing: border-box;
     position: fixed;
     bottom: 74px;
     right: 24px;
@@ -406,6 +411,104 @@
 .kotoba-icon-btn.close:hover {
     background: var(--status-live-bg);
     color: #f87171;
+}
+
+.kotoba-icon-btn.settings:hover {
+    color: var(--color-yellow);
+    background: rgba(250, 204, 21, 0.12);
+}
+
+.kotoba-icon-btn.save-pref:hover {
+    color: #34d399;
+    background: rgba(52, 211, 153, 0.12);
+}
+
+.kotoba-icon-btn.resize-btn:hover {
+    color: var(--color-yellow);
+    background: rgba(250, 204, 21, 0.12);
+}
+
+.kotoba-icon-btn:disabled,
+.kotoba-icon-btn.disabled {
+    opacity: 0.3 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+}
+
+/* Edge & Corner Invisible Window Resizers */
+.kotoba-resizer {
+    position: absolute;
+    z-index: 10;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.kotoba-resizer.resizer-n {
+    top: -4px;
+    left: 8px;
+    right: 8px;
+    height: 8px;
+    cursor: ns-resize;
+}
+
+.kotoba-resizer.resizer-s {
+    bottom: -4px;
+    left: 8px;
+    right: 8px;
+    height: 8px;
+    cursor: ns-resize;
+}
+
+.kotoba-resizer.resizer-w {
+    left: -4px;
+    top: 8px;
+    bottom: 8px;
+    width: 8px;
+    cursor: ew-resize;
+}
+
+.kotoba-resizer.resizer-e {
+    right: -4px;
+    top: 8px;
+    bottom: 8px;
+    width: 8px;
+    cursor: ew-resize;
+}
+
+.kotoba-resizer.resizer-nw {
+    top: -4px;
+    left: -4px;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    z-index: 12;
+}
+
+.kotoba-resizer.resizer-ne {
+    top: -4px;
+    right: -4px;
+    width: 14px;
+    height: 14px;
+    cursor: nesw-resize;
+    z-index: 12;
+}
+
+.kotoba-resizer.resizer-sw {
+    bottom: -4px;
+    left: -4px;
+    width: 14px;
+    height: 14px;
+    cursor: nesw-resize;
+    z-index: 12;
+}
+
+.kotoba-resizer.resizer-se {
+    bottom: -4px;
+    right: -4px;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    z-index: 12;
 }
 
 /* =============================================================================
@@ -779,10 +882,13 @@
     line-height: 1;
 }
 
-.kotoba-pane-icon-btn:hover {
-    background: rgba(250, 204, 21, 0.18);
-    border-color: var(--border-highlight);
+.kotoba-pane-icon-btn:hover,
+.kotoba-pane-icon-btn.active,
+.kotoba-summary-btn-wrap.open .kotoba-pane-icon-btn {
+    background: rgba(250, 204, 21, 0.22);
+    border-color: var(--color-yellow);
     color: var(--color-yellow);
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.35);
     transform: translateY(-1px);
 }
 
@@ -955,7 +1061,7 @@
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     z-index: 2147483647;
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     opacity: 0;
@@ -964,6 +1070,7 @@
 }
 
 .kotoba-modal-backdrop.open {
+    display: flex;
     opacity: 1;
     pointer-events: auto;
 }
@@ -1298,7 +1405,7 @@
 }
 
 .kotoba-summary-btn-wrap:hover .kotoba-summary-popover,
-.kotoba-summary-btn-wrap:focus-within .kotoba-summary-popover {
+.kotoba-summary-btn-wrap.open .kotoba-summary-popover {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0) scale(1);
@@ -1334,4 +1441,225 @@
 .kotoba-summary-popover-body::-webkit-scrollbar-thumb {
     background: rgba(250, 204, 21, 0.3);
     border-radius: 2px;
+}
+
+/* =============================================================================
+   Settings Modal
+   ============================================================================= */
+
+.kotoba-settings-card {
+    position: relative;
+    background: #09090b;
+    border: 1px solid rgba(250, 204, 21, 0.40);
+    box-shadow: 0 0 35px rgba(250, 204, 21, 0.20), 0 20px 50px rgba(0, 0, 0, 0.95);
+    border-radius: 14px;
+    width: 90%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.92) translateY(10px);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    color: #ffffff;
+    font-family: var(--font-main);
+}
+
+.kotoba-modal-backdrop.open .kotoba-settings-card {
+    transform: scale(1) translateY(0);
+}
+
+.kotoba-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.kotoba-settings-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kotoba-settings-title-group svg {
+    color: var(--color-yellow);
+}
+
+.kotoba-settings-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.3px;
+}
+
+.kotoba-settings-close-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #a1a1aa;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    transition: all 0.2s ease;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.kotoba-settings-close-btn:hover {
+    background: rgba(250, 204, 21, 0.2);
+    border-color: #facc15;
+    color: #facc15;
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+}
+
+.kotoba-settings-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.kotoba-setting-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.kotoba-setting-item:last-child {
+    border-bottom: none;
+}
+
+.kotoba-setting-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.kotoba-setting-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #f4f4f5;
+}
+
+.kotoba-setting-desc {
+    font-size: 9.5px;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.kotoba-setting-input {
+    width: 76px;
+    background: #18181b;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    color: #facc15;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 8px;
+    text-align: right;
+    transition: all 0.2s ease;
+    outline: none;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.kotoba-setting-input::-webkit-outer-spin-button,
+.kotoba-setting-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.kotoba-setting-input.wide {
+    width: 175px;
+    text-align: left;
+    font-size: 11px;
+}
+
+.kotoba-setting-section-divider {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--color-yellow);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 2px;
+}
+
+.kotoba-setting-input:focus {
+    border-color: #facc15;
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.2);
+}
+
+.kotoba-settings-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.kotoba-settings-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kotoba-settings-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.kotoba-settings-btn.secondary {
+    background: rgba(255, 255, 255, 0.06);
+    color: #a1a1aa;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.kotoba-settings-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.kotoba-settings-btn.reset {
+    background: transparent;
+    color: #71717a;
+    font-size: 10px;
+    padding: 4px 8px;
+}
+
+.kotoba-settings-btn.reset:hover {
+    color: #facc15;
+}
+
+.kotoba-settings-btn.primary {
+    background: #facc15;
+    color: #000000;
+    font-weight: 700;
+}
+
+.kotoba-settings-btn.primary:hover {
+    background: #fde047;
+    box-shadow: 0 0 12px rgba(250, 204, 21, 0.4);
 }

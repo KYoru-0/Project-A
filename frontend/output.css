@@ -129,6 +129,33 @@ html, body {
     gap: 8px;
 }
 
+.header-icon-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.header-icon-btn:hover {
+    background: rgba(250, 204, 21, 0.15);
+    color: var(--color-yellow);
+    border-color: var(--border-highlight);
+}
+
+.header-icon-btn:disabled,
+.header-icon-btn.disabled {
+    opacity: 0.3 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+}
+
 /* Status Pill */
 .status-pill {
     display: flex;
@@ -614,10 +641,13 @@ html, body {
     transition: all 0.2s ease;
 }
 
-.pane-icon-btn:hover {
-    background: rgba(250, 204, 21, 0.15);
+.pane-icon-btn:hover,
+.pane-icon-btn.active,
+.summary-btn-wrap.open .pane-icon-btn {
+    background: rgba(250, 204, 21, 0.22);
     color: var(--color-yellow);
-    border-color: var(--border-highlight);
+    border-color: var(--color-yellow);
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.35);
 }
 
 .pane-scroll-area {
@@ -1272,7 +1302,7 @@ html, body {
 }
 
 .summary-btn-wrap:hover .summary-popover,
-.summary-btn-wrap:focus-within .summary-popover {
+.summary-btn-wrap.open .summary-popover {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0) scale(1);
@@ -1323,4 +1353,225 @@ html, body {
     0% { opacity: 0.6; transform: scale(0.95); }
     50% { opacity: 1; transform: scale(1.1); }
     100% { opacity: 0.6; transform: scale(0.95); }
+}
+
+/* =============================================================================
+   Settings Modal (Standalone Window)
+   ============================================================================= */
+
+.settings-modal-card {
+    position: relative;
+    background: #09090b;
+    border: 1px solid rgba(250, 204, 21, 0.40);
+    box-shadow: 0 0 35px rgba(250, 204, 21, 0.20), 0 20px 50px rgba(0, 0, 0, 0.95);
+    border-radius: 14px;
+    width: 90%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.92) translateY(10px);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    color: #ffffff;
+    font-family: var(--font-main);
+}
+
+.modal-backdrop.open .settings-modal-card {
+    transform: scale(1) translateY(0);
+}
+
+.settings-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.settings-modal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-modal-title-group svg {
+    color: var(--color-yellow);
+}
+
+.settings-modal-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.3px;
+}
+
+.settings-modal-close-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #a1a1aa;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    transition: all 0.2s ease;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.settings-modal-close-btn:hover {
+    background: rgba(250, 204, 21, 0.2);
+    border-color: #facc15;
+    color: #facc15;
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+}
+
+.settings-modal-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.setting-item:last-child {
+    border-bottom: none;
+}
+
+.setting-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.setting-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #f4f4f5;
+}
+
+.setting-desc {
+    font-size: 9.5px;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.setting-input {
+    width: 76px;
+    background: #18181b;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    color: #facc15;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 8px;
+    text-align: right;
+    transition: all 0.2s ease;
+    outline: none;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.setting-input::-webkit-outer-spin-button,
+.setting-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.setting-input.wide {
+    width: 175px;
+    text-align: left;
+    font-size: 11px;
+}
+
+.setting-section-divider {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--color-yellow);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 2px;
+}
+
+.setting-input:focus {
+    border-color: #facc15;
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.2);
+}
+
+.settings-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.settings-modal-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.settings-btn.secondary {
+    background: rgba(255, 255, 255, 0.06);
+    color: #a1a1aa;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.settings-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.settings-btn.reset {
+    background: transparent;
+    color: #71717a;
+    font-size: 10px;
+    padding: 4px 8px;
+}
+
+.settings-btn.reset:hover {
+    color: #facc15;
+}
+
+.settings-btn.primary {
+    background: #facc15;
+    color: #000000;
+    font-weight: 700;
+}
+
+.settings-btn.primary:hover {
+    background: #fde047;
+    box-shadow: 0 0 12px rgba(250, 204, 21, 0.4);
 }

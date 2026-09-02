@@ -76,6 +76,51 @@
     let summaryBtn = null;
     let summaryContentEl = null;
 
+    let settingsBtn = null;
+    let settingsModal = null;
+    let settingsCloseBtn = null;
+    let settingsCancelBtn = null;
+    let settingsOkBtn = null;
+    let settingsResetBtn = null;
+    let settingChatContextInput = null;
+    let settingSummaryWordsInput = null;
+    let settingBufferMinCharsInput = null;
+    let settingBufferFlushDelayInput = null;
+    let settingLookaheadTimeoutInput = null;
+    let settingGeminiKeyInput = null;
+    let settingDeepgramKeyInput = null;
+    let savePrefBtn = null;
+    let resetSizeBtn = null;
+    let userDefaultBounds = null;
+
+    const FACTORY_DEFAULT_BOUNDS = {
+        width: 620,
+        height: 390,
+        bottom: 74,
+        right: 24,
+    };
+
+    const DEFAULT_PIPELINE_SETTINGS = {
+        chat_context_count: 20,
+        summary_max_words: 500,
+        buffer_min_chars: 30,
+        buffer_flush_delay: 3.0,
+        lookahead_timeout: 3.0,
+        gemini_api_key: '',
+        deepgram_api_key: '',
+    };
+    let pipelineSettings = { ...DEFAULT_PIPELINE_SETTINGS };
+
+    async function loadPipelineSettings() {
+        try {
+            const data = await chrome.storage.local.get('kotoba_settings');
+            if (data && data.kotoba_settings) {
+                pipelineSettings = { ...DEFAULT_PIPELINE_SETTINGS, ...data.kotoba_settings };
+            }
+        } catch (e) {}
+    }
+    loadPipelineSettings();
+
     let currentSummary = "";
     let lastVtuberProfile = null;
     let isOverlayOpen = false;
@@ -279,11 +324,8 @@
 
         const vId = getVideoIdFromUrl(window.location.href);
         if (vId && vId !== currentVideoId) {
-            currentVideoId = vId;
-            lastQueriedChannel = '';
-            resolvedVtuberName = '';
-            currentChannelLink = '';
-            lastVtuberProfile = null;
+            switchVideo(vId);
+            return;
         }
 
         const meta = extractYouTubeMetadata();
@@ -392,11 +434,21 @@
             }
         }
 
-        vtuberModal.classList.add('open');
+        if (vtuberModal) {
+            vtuberModal.style.display = 'flex';
+            vtuberModal.classList.add('open');
+        }
     }
 
     function closeVtuberCard() {
-        if (vtuberModal) vtuberModal.classList.remove('open');
+        if (vtuberModal) {
+            vtuberModal.classList.remove('open');
+            setTimeout(() => {
+                if (vtuberModal && !vtuberModal.classList.contains('open')) {
+                    vtuberModal.style.display = 'none';
+                }
+            }, 250);
+        }
     }
 
     function scheduleMetadataUpdates() {
@@ -436,6 +488,16 @@
         document.body.appendChild(root);
         shadowRoot = root.attachShadow({ mode: 'open' });
 
+        const criticalStyle = document.createElement('style');
+        criticalStyle.textContent = `
+            *, *::before, *::after { box-sizing: border-box !important; }
+            #kotoba-overlay-panel { box-sizing: border-box !important; }
+            #kotoba-overlay-panel:not(.visible) { display: none !important; }
+            .kotoba-modal-backdrop:not(.open) { display: none !important; opacity: 0 !important; pointer-events: none !important; }
+            .kotoba-channel-hover-card { display: none !important; }
+        `;
+        shadowRoot.appendChild(criticalStyle);
+
         const styleLink = document.createElement('link');
         styleLink.rel = 'stylesheet';
         styleLink.href = chrome.runtime.getURL('content.css');
@@ -445,7 +507,7 @@
         wrapper.className = 'kotoba-wrapper';
         wrapper.innerHTML = `
             <button id="kotoba-trigger-btn" class="unauthorized" title="Press Alt+K (or click toolbar icon) to authorize &amp; open KOTOBA" style="background-image: url('${chrome.runtime.getURL('icons/256.png')}');"></button>
-            <div id="kotoba-overlay-panel">
+            <div id="kotoba-overlay-panel" style="display: none;">
                 <div class="kotoba-bubble-queue" id="kotoba-bubble-queue"></div>
                 <div class="kotoba-toast" id="kotoba-toast">Notice</div>
                 <div class="kotoba-header">
@@ -462,6 +524,27 @@
                         </div>
                     </div>
                     <div class="kotoba-header-actions">
+                        <button class="kotoba-icon-btn settings" id="kotoba-settings-btn" title="Pipeline Settings">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                        </button>
+                        <button class="kotoba-icon-btn save-pref" id="kotoba-save-pref-btn" title="Save Position &amp; Size Preference">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                        </button>
+                        <button class="kotoba-icon-btn resize-btn" id="kotoba-reset-size-btn" title="Reset to Default Size &amp; Position">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="4 14 10 14 10 20"></polyline>
+                                <polyline points="20 10 14 10 14 4"></polyline>
+                                <line x1="14" y1="10" x2="21" y2="3"></line>
+                                <line x1="3" y1="21" x2="10" y2="14"></line>
+                            </svg>
+                        </button>
                         <button class="kotoba-icon-btn close" id="kotoba-close-btn" title="Close">✕</button>
                     </div>
                 </div>
@@ -549,7 +632,7 @@
                                         <path d="M4.5 15.5C3.94772 15.5 3.5 15.0523 3.5 14.5V5.5C3.5 4.39543 4.39543 3.5 5.5 3.5H14.5C15.0523 3.5 15.5 3.94772 15.5 4.5"></path>
                                     </svg>
                                 </button>
-                                <div class="kotoba-summary-btn-wrap">
+                                <div class="kotoba-summary-btn-wrap" id="kotoba-summary-wrap">
                                     <button class="kotoba-pane-icon-btn" id="kotoba-summary-btn" title="Stream Context Summary">
                                         <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -574,10 +657,18 @@
                         </div>
                     </div>
                 </div>
+                <div class="kotoba-resizer resizer-n" data-dir="n"></div>
+                <div class="kotoba-resizer resizer-s" data-dir="s"></div>
+                <div class="kotoba-resizer resizer-w" data-dir="w"></div>
+                <div class="kotoba-resizer resizer-e" data-dir="e"></div>
+                <div class="kotoba-resizer resizer-nw" data-dir="nw"></div>
+                <div class="kotoba-resizer resizer-ne" data-dir="ne"></div>
+                <div class="kotoba-resizer resizer-sw" data-dir="sw"></div>
+                <div class="kotoba-resizer resizer-se" data-dir="se"></div>
             </div>
 
             <!-- VTuber Profile Modal Card -->
-            <div class="kotoba-modal-backdrop" id="kotoba-vtuber-modal">
+            <div class="kotoba-modal-backdrop" id="kotoba-vtuber-modal" style="display: none;">
                 <div class="kotoba-card">
                     <button class="kotoba-card-close" id="kotoba-card-close" title="Close">✕</button>
                     <div class="kotoba-card-header">
@@ -603,6 +694,81 @@
                         <ul class="kotoba-card-facts-list" id="kotoba-card-facts">
                             <li class="kotoba-card-empty-state">No extra facts found for this channel.</li>
                         </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Modal Panel -->
+            <div class="kotoba-modal-backdrop" id="kotoba-settings-modal" style="display: none;">
+                <div class="kotoba-settings-card">
+                    <div class="kotoba-settings-header">
+                        <div class="kotoba-settings-title-group">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                            <span class="kotoba-settings-title">Pipeline Settings</span>
+                        </div>
+                        <button class="kotoba-settings-close-btn" id="kotoba-settings-close" title="Close">✕</button>
+                    </div>
+                    <div class="kotoba-settings-body">
+                        <div class="kotoba-setting-item">
+                            <div class="kotoba-setting-info">
+                                <span class="kotoba-setting-label">Chat Context Count</span>
+                                <span class="kotoba-setting-desc">Recent live chat messages sent to Gemini (1 - 50)</span>
+                            </div>
+                            <input type="number" class="kotoba-setting-input" id="setting-chat-context-count" min="1" max="50" step="1">
+                        </div>
+                        <div class="kotoba-setting-item">
+                            <div class="kotoba-setting-info">
+                                <span class="kotoba-setting-label">Summary Max Words</span>
+                                <span class="kotoba-setting-desc">Word limit for running stream topic summary (50 - 2000)</span>
+                            </div>
+                            <input type="number" class="kotoba-setting-input" id="setting-summary-max-words" min="50" max="2000" step="25">
+                        </div>
+                        <div class="kotoba-setting-item">
+                            <div class="kotoba-setting-info">
+                                <span class="kotoba-setting-label">Buffer Min Chars Threshold</span>
+                                <span class="kotoba-setting-desc">Min chars before watching for punctuation marks (5 - 200)</span>
+                            </div>
+                            <input type="number" class="kotoba-setting-input" id="setting-buffer-min-chars" min="5" max="200" step="1">
+                        </div>
+                        <div class="kotoba-setting-item">
+                            <div class="kotoba-setting-info">
+                                <span class="kotoba-setting-label">Buffer Flush Delay (seconds)</span>
+                                <span class="kotoba-setting-desc">Delay before auto-flushing completed sentences (0.5 - 30.0s)</span>
+                            </div>
+                            <input type="number" class="kotoba-setting-input" id="setting-buffer-flush-delay" min="0.5" max="30" step="0.5">
+                        </div>
+                        <div class="kotoba-setting-item">
+                            <div class="kotoba-setting-info">
+                                <span class="kotoba-setting-label">Translation Lookahead Timeout (seconds)</span>
+                                <span class="kotoba-setting-desc">Seconds to wait for 2nd sentence before translating (0.0 - 30.0s)</span>
+                            </div>
+                            <input type="number" class="kotoba-setting-input" id="setting-lookahead-timeout" min="0" max="30" step="0.5">
+                        </div>
+                        <div class="kotoba-setting-section-divider">API Keys (Optional)</div>
+                        <div class="kotoba-setting-item">
+                            <div class="kotoba-setting-info">
+                                <span class="kotoba-setting-label">Gemini API Key</span>
+                                <span class="kotoba-setting-desc">Custom key override (leave blank for server default)</span>
+                            </div>
+                            <input type="password" class="kotoba-setting-input wide" id="setting-gemini-key" placeholder="AIzaSy... (optional)" autocomplete="off">
+                        </div>
+                        <div class="kotoba-setting-item">
+                            <div class="kotoba-setting-info">
+                                <span class="kotoba-setting-label">Deepgram API Key</span>
+                                <span class="kotoba-setting-desc">Custom key override (leave blank for server default)</span>
+                            </div>
+                            <input type="password" class="kotoba-setting-input wide" id="setting-deepgram-key" placeholder="Token... (optional)" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="kotoba-settings-footer">
+                        <button class="kotoba-settings-btn reset" id="kotoba-settings-reset" title="Reset to default settings">Reset Defaults</button>
+                        <div class="kotoba-settings-footer-actions">
+                            <button class="kotoba-settings-btn secondary" id="kotoba-settings-cancel">Cancel</button>
+                            <button class="kotoba-settings-btn primary" id="kotoba-settings-ok">OK</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -681,7 +847,26 @@
         cardFactsList = shadowRoot.getElementById('kotoba-card-facts');
         cardCloseBtn = shadowRoot.getElementById('kotoba-card-close');
 
+        // Bind Settings modal references
+        settingsBtn = shadowRoot.getElementById('kotoba-settings-btn');
+        settingsModal = shadowRoot.getElementById('kotoba-settings-modal');
+        settingsCloseBtn = shadowRoot.getElementById('kotoba-settings-close');
+        settingsCancelBtn = shadowRoot.getElementById('kotoba-settings-cancel');
+        settingsOkBtn = shadowRoot.getElementById('kotoba-settings-ok');
+        settingsResetBtn = shadowRoot.getElementById('kotoba-settings-reset');
+        settingChatContextInput = shadowRoot.getElementById('setting-chat-context-count');
+        settingSummaryWordsInput = shadowRoot.getElementById('setting-summary-max-words');
+        settingBufferMinCharsInput = shadowRoot.getElementById('setting-buffer-min-chars');
+        settingBufferFlushDelayInput = shadowRoot.getElementById('setting-buffer-flush-delay');
+        settingLookaheadTimeoutInput = shadowRoot.getElementById('setting-lookahead-timeout');
+        settingGeminiKeyInput = shadowRoot.getElementById('setting-gemini-key');
+        settingDeepgramKeyInput = shadowRoot.getElementById('setting-deepgram-key');
+        savePrefBtn = shadowRoot.getElementById('kotoba-save-pref-btn');
+        resetSizeBtn = shadowRoot.getElementById('kotoba-reset-size-btn');
+
         makeDraggable(shadowRoot.querySelector('.kotoba-header'), overlayPanel);
+        setupWindowResizers(overlayPanel);
+        applySavedBounds();
         attachEventListeners();
         observeYouTubeMetadata();
         scheduleMetadataUpdates();
@@ -701,7 +886,7 @@
         let initialTop = 0;
 
         handle.addEventListener('mousedown', (e) => {
-            if (e.target.closest('button') || e.target.closest('.kotoba-icon-btn')) return;
+            if (e.target.closest('button') || e.target.closest('.kotoba-icon-btn') || e.target.closest('.kotoba-resizer')) return;
             isDragging = true;
             startX = e.clientX;
             startY = e.clientY;
@@ -731,12 +916,244 @@
                 handle.style.cursor = 'grab';
                 window.removeEventListener('mousemove', onMouseMove);
                 window.removeEventListener('mouseup', onMouseUp);
+                saveCurrentBounds();
             };
 
             window.addEventListener('mousemove', onMouseMove);
             window.addEventListener('mouseup', onMouseUp);
         });
     }
+
+    function setupWindowResizers(panel) {
+        if (!panel) return;
+        const resizers = panel.querySelectorAll('.kotoba-resizer');
+        const minWidth = 380;
+        const minHeight = 240;
+
+        resizers.forEach(handle => {
+            const dir = handle.dataset.dir;
+            handle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const rect = panel.getBoundingClientRect();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startLeft = rect.left;
+                const startTop = rect.top;
+                const startWidth = rect.width;
+                const startHeight = rect.height;
+
+                panel.style.bottom = 'auto';
+                panel.style.right = 'auto';
+                panel.style.left = `${startLeft}px`;
+                panel.style.top = `${startTop}px`;
+
+                const cursorMap = {
+                    n: 'ns-resize',
+                    s: 'ns-resize',
+                    e: 'ew-resize',
+                    w: 'ew-resize',
+                    nw: 'nwse-resize',
+                    ne: 'nesw-resize',
+                    sw: 'nesw-resize',
+                    se: 'nwse-resize'
+                };
+                const activeCursor = cursorMap[dir] || 'default';
+                document.body.style.userSelect = 'none';
+                document.body.style.cursor = activeCursor;
+
+                const onMouseMove = (ev) => {
+                    const dx = ev.clientX - startX;
+                    const dy = ev.clientY - startY;
+
+                    // East (Right)
+                    if (dir.includes('e')) {
+                        const maxW = window.innerWidth - startLeft - 16;
+                        const newW = Math.min(Math.max(minWidth, startWidth + dx), maxW);
+                        panel.style.width = `${Math.round(newW)}px`;
+                    }
+
+                    // South (Bottom)
+                    if (dir.includes('s')) {
+                        const maxH = window.innerHeight - startTop - 16;
+                        const newH = Math.min(Math.max(minHeight, startHeight + dy), maxH);
+                        panel.style.height = `${Math.round(newH)}px`;
+                    }
+
+                    // West (Left)
+                    if (dir.includes('w')) {
+                        let newW = startWidth - dx;
+                        let newLeft = startLeft + dx;
+                        if (newW < minWidth) {
+                            newLeft = startLeft + (startWidth - minWidth);
+                            newW = minWidth;
+                        } else if (newLeft < 16) {
+                            newW = startWidth + (startLeft - 16);
+                            newLeft = 16;
+                        }
+                        panel.style.left = `${Math.round(newLeft)}px`;
+                        panel.style.width = `${Math.round(newW)}px`;
+                    }
+
+                    // North (Top)
+                    if (dir.includes('n')) {
+                        let newH = startHeight - dy;
+                        let newTop = startTop + dy;
+                        if (newH < minHeight) {
+                            newTop = startTop + (startHeight - minHeight);
+                            newH = minHeight;
+                        } else if (newTop < 16) {
+                            newH = startHeight + (startTop - 16);
+                            newTop = 16;
+                        }
+                        panel.style.top = `${Math.round(newTop)}px`;
+                        panel.style.height = `${Math.round(newH)}px`;
+                    }
+                };
+
+                const onMouseUp = () => {
+                    document.body.style.userSelect = '';
+                    document.body.style.cursor = '';
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    saveCurrentBounds();
+                    scrollToBottomFeeds();
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            });
+        });
+    }
+
+    async function saveCurrentBounds() {
+        if (!overlayPanel) return;
+        const rect = overlayPanel.getBoundingClientRect();
+        const styleW = parseFloat(overlayPanel.style.width);
+        const styleH = parseFloat(overlayPanel.style.height);
+        const width = (!isNaN(styleW) && Math.abs(styleW - rect.width) <= 2) ? Math.round(styleW) : Math.round(rect.width);
+        const height = (!isNaN(styleH) && Math.abs(styleH - rect.height) <= 2) ? Math.round(styleH) : Math.round(rect.height);
+
+        const bounds = {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            width: width,
+            height: height,
+            isCustom: true
+        };
+        try {
+            await chrome.storage.local.set({ kotoba_overlay_bounds: bounds });
+        } catch (e) {}
+    }
+
+    async function savePreferredBounds() {
+        if (!overlayPanel) return;
+        const rect = overlayPanel.getBoundingClientRect();
+        const styleW = parseFloat(overlayPanel.style.width);
+        const styleH = parseFloat(overlayPanel.style.height);
+        const width = (!isNaN(styleW) && Math.abs(styleW - rect.width) <= 2) ? Math.round(styleW) : Math.round(rect.width);
+        const height = (!isNaN(styleH) && Math.abs(styleH - rect.height) <= 2) ? Math.round(styleH) : Math.round(rect.height);
+
+        const bounds = {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            width: width,
+            height: height,
+            isCustom: true
+        };
+        try {
+            userDefaultBounds = bounds;
+            await chrome.storage.local.set({
+                kotoba_user_default_bounds: bounds,
+                kotoba_overlay_bounds: bounds
+            });
+            showToast('Default size & position overwritten!');
+        } catch (e) {
+            showToast('Error saving preference');
+        }
+    }
+
+    async function resetToDefaultBounds() {
+        if (!overlayPanel) return;
+        if (userDefaultBounds && userDefaultBounds.isCustom) {
+            let width = Math.min(userDefaultBounds.width || FACTORY_DEFAULT_BOUNDS.width, window.innerWidth - 32);
+            let height = Math.min(userDefaultBounds.height || FACTORY_DEFAULT_BOUNDS.height, window.innerHeight - 48);
+            width = Math.max(380, width);
+            height = Math.max(240, height);
+
+            let left = userDefaultBounds.left;
+            let top = userDefaultBounds.top;
+
+            if (typeof left === 'number' && typeof top === 'number') {
+                left = Math.min(Math.max(0, left), Math.max(0, window.innerWidth - width));
+                top = Math.min(Math.max(0, top), Math.max(0, window.innerHeight - height));
+                overlayPanel.style.left = `${left}px`;
+                overlayPanel.style.top = `${top}px`;
+                overlayPanel.style.right = 'auto';
+                overlayPanel.style.bottom = 'auto';
+            }
+            overlayPanel.style.width = `${width}px`;
+            overlayPanel.style.height = `${height}px`;
+
+            await saveCurrentBounds();
+            scrollToBottomFeeds();
+            showToast('Restored to default size & position');
+        } else {
+            overlayPanel.style.left = '';
+            overlayPanel.style.top = '';
+            overlayPanel.style.right = `${FACTORY_DEFAULT_BOUNDS.right}px`;
+            overlayPanel.style.bottom = `${FACTORY_DEFAULT_BOUNDS.bottom}px`;
+            overlayPanel.style.width = `${FACTORY_DEFAULT_BOUNDS.width}px`;
+            overlayPanel.style.height = `${FACTORY_DEFAULT_BOUNDS.height}px`;
+
+            try {
+                await chrome.storage.local.remove(['kotoba_overlay_bounds']);
+                showToast('Reset to default size & position');
+            } catch (e) {}
+            scrollToBottomFeeds();
+        }
+    }
+
+    async function applySavedBounds() {
+        if (!overlayPanel) return;
+        try {
+            const data = await chrome.storage.local.get(['kotoba_user_default_bounds', 'kotoba_preferred_bounds', 'kotoba_overlay_bounds']);
+            userDefaultBounds = data.kotoba_user_default_bounds || data.kotoba_preferred_bounds || null;
+            const bounds = data.kotoba_overlay_bounds || userDefaultBounds;
+            if (bounds && bounds.isCustom) {
+                let width = Math.min(bounds.width || FACTORY_DEFAULT_BOUNDS.width, window.innerWidth - 32);
+                let height = Math.min(bounds.height || FACTORY_DEFAULT_BOUNDS.height, window.innerHeight - 48);
+                width = Math.max(380, width);
+                height = Math.max(240, height);
+
+                let left = bounds.left;
+                let top = bounds.top;
+
+                if (typeof left === 'number' && typeof top === 'number') {
+                    left = Math.min(Math.max(0, left), Math.max(0, window.innerWidth - width));
+                    top = Math.min(Math.max(0, top), Math.max(0, window.innerHeight - height));
+                    overlayPanel.style.left = `${left}px`;
+                    overlayPanel.style.top = `${top}px`;
+                    overlayPanel.style.right = 'auto';
+                    overlayPanel.style.bottom = 'auto';
+                }
+                overlayPanel.style.width = `${width}px`;
+                overlayPanel.style.height = `${height}px`;
+            }
+        } catch (e) {}
+    }
+
+    window.addEventListener('resize', () => {
+        if (!overlayPanel || !overlayPanel.style.left) return;
+        const rect = overlayPanel.getBoundingClientRect();
+        if (rect.right > window.innerWidth || rect.bottom > window.innerHeight) {
+            let newLeft = Math.min(rect.left, Math.max(0, window.innerWidth - rect.width - 16));
+            let newTop = Math.min(rect.top, Math.max(0, window.innerHeight - rect.height - 16));
+            overlayPanel.style.left = `${newLeft}px`;
+            overlayPanel.style.top = `${newTop}px`;
+        }
+    });
 
     function checkTabReadiness() {
         chrome.runtime.sendMessage({ action: 'checkTabReadiness' }, (res) => {
@@ -783,11 +1200,13 @@
         isOverlayOpen = open === null ? !isOverlayOpen : open;
         if (isOverlayOpen) {
             overlayPanel.style.display = 'flex';
+            overlayPanel.classList.add('visible');
             updateMetadataUI();
             checkTabReadiness();
             scrollToBottomFeeds();
         } else {
             overlayPanel.style.display = 'none';
+            overlayPanel.classList.remove('visible');
         }
     }
 
@@ -799,6 +1218,20 @@
             }
             toggleOverlay();
         });
+
+        if (savePrefBtn) {
+            savePrefBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                savePreferredBounds();
+            });
+        }
+
+        if (resetSizeBtn) {
+            resetSizeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                resetToDefaultBounds();
+            });
+        }
 
         closeBtn.addEventListener('click', () => toggleOverlay(false));
         toggleBtn.addEventListener('click', () => { isCapturing ? stopCapture() : startCapture(); });
@@ -838,7 +1271,35 @@
             consecutiveNegativeCount = 0;
             renderRelevantComment(null);
             if (bubbleQueue) bubbleQueue.innerHTML = '';
-            showToast('Feed cleared');
+            // Persist the cleared feed in storage without deleting the summary
+            if (currentVideoId) {
+                flushVideoStateSync(currentVideoId);
+            }
+            showToast('Feed cleared (summary preserved)');
+        });
+
+        // Summary Popover Hold & Toggle Event Listeners
+        const summaryWrap = shadowRoot.getElementById('kotoba-summary-wrap');
+        const summaryPopover = shadowRoot.getElementById('kotoba-summary-popover');
+        if (summaryBtn && summaryWrap) {
+            summaryBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = summaryWrap.classList.toggle('open');
+                summaryBtn.classList.toggle('active', isOpen);
+            });
+        }
+
+        if (summaryPopover) {
+            summaryPopover.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+
+        shadowRoot.addEventListener('click', (e) => {
+            if (summaryWrap && !summaryWrap.contains(e.target)) {
+                summaryWrap.classList.remove('open');
+                if (summaryBtn) summaryBtn.classList.remove('active');
+            }
         });
 
         // VTuber Modal & Channel Hover Event Listeners
@@ -894,11 +1355,130 @@
             });
         }
 
+        // Settings modal listeners
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!isCapturing) openSettingsModal();
+            });
+        }
+        if (settingsCloseBtn) {
+            settingsCloseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeSettingsModal();
+            });
+        }
+        if (settingsCancelBtn) {
+            settingsCancelBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeSettingsModal();
+            });
+        }
+        if (settingsResetBtn) {
+            settingsResetBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (settingChatContextInput) settingChatContextInput.value = DEFAULT_PIPELINE_SETTINGS.chat_context_count;
+                if (settingSummaryWordsInput) settingSummaryWordsInput.value = DEFAULT_PIPELINE_SETTINGS.summary_max_words;
+                if (settingBufferMinCharsInput) settingBufferMinCharsInput.value = DEFAULT_PIPELINE_SETTINGS.buffer_min_chars;
+                if (settingBufferFlushDelayInput) settingBufferFlushDelayInput.value = DEFAULT_PIPELINE_SETTINGS.buffer_flush_delay;
+                if (settingLookaheadTimeoutInput) settingLookaheadTimeoutInput.value = DEFAULT_PIPELINE_SETTINGS.lookahead_timeout;
+                if (settingGeminiKeyInput) settingGeminiKeyInput.value = '';
+                if (settingDeepgramKeyInput) settingDeepgramKeyInput.value = '';
+            });
+        }
+        if (settingsOkBtn) {
+            settingsOkBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                savePipelineSettings();
+            });
+        }
+        if (settingsModal) {
+            settingsModal.addEventListener('click', (e) => {
+                if (e.target === settingsModal) closeSettingsModal();
+            });
+
+            // Prevent typing in settings inputs from triggering YouTube player shortcuts (e.g. jumping video)
+            const blockYouTubeShortcuts = (e) => {
+                if (e.key === 'Escape') return; // Allow Escape to close modal
+                e.stopPropagation();
+            };
+            settingsModal.addEventListener('keydown', blockYouTubeShortcuts);
+            settingsModal.addEventListener('keyup', blockYouTubeShortcuts);
+            settingsModal.addEventListener('keypress', blockYouTubeShortcuts);
+
+            settingsModal.querySelectorAll('input').forEach(inp => {
+                inp.addEventListener('keydown', blockYouTubeShortcuts);
+                inp.addEventListener('keyup', blockYouTubeShortcuts);
+                inp.addEventListener('keypress', blockYouTubeShortcuts);
+            });
+        }
+
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && vtuberModal && vtuberModal.classList.contains('open')) {
-                closeVtuberCard();
+            if (e.key === 'Escape') {
+                if (settingsModal && settingsModal.classList.contains('open')) {
+                    closeSettingsModal();
+                } else if (vtuberModal && vtuberModal.classList.contains('open')) {
+                    closeVtuberCard();
+                }
             }
         });
+    }
+
+    function populateSettingsInputs() {
+        if (settingChatContextInput) settingChatContextInput.value = pipelineSettings.chat_context_count;
+        if (settingSummaryWordsInput) settingSummaryWordsInput.value = pipelineSettings.summary_max_words;
+        if (settingBufferMinCharsInput) settingBufferMinCharsInput.value = pipelineSettings.buffer_min_chars;
+        if (settingBufferFlushDelayInput) settingBufferFlushDelayInput.value = pipelineSettings.buffer_flush_delay;
+        if (settingLookaheadTimeoutInput) settingLookaheadTimeoutInput.value = pipelineSettings.lookahead_timeout;
+        if (settingGeminiKeyInput) settingGeminiKeyInput.value = pipelineSettings.gemini_api_key || '';
+        if (settingDeepgramKeyInput) settingDeepgramKeyInput.value = pipelineSettings.deepgram_api_key || '';
+    }
+
+    function openSettingsModal() {
+        if (isCapturing) return;
+        if (!shadowRoot) createKotobaOverlayDOM();
+        populateSettingsInputs();
+        if (settingsModal) {
+            settingsModal.style.display = 'flex';
+            settingsModal.classList.add('open');
+        }
+    }
+
+    function closeSettingsModal() {
+        if (settingsModal) {
+            settingsModal.classList.remove('open');
+            setTimeout(() => {
+                if (settingsModal && !settingsModal.classList.contains('open')) {
+                    settingsModal.style.display = 'none';
+                }
+            }, 250);
+        }
+    }
+
+    async function savePipelineSettings() {
+        const chatCtx = parseInt(settingChatContextInput?.value, 10);
+        const summaryWords = parseInt(settingSummaryWordsInput?.value, 10);
+        const bufMinChars = parseInt(settingBufferMinCharsInput?.value, 10);
+        const bufFlushDelay = parseFloat(settingBufferFlushDelayInput?.value);
+        const lookaheadTimeout = parseFloat(settingLookaheadTimeoutInput?.value);
+
+        pipelineSettings = {
+            chat_context_count: isNaN(chatCtx) ? DEFAULT_PIPELINE_SETTINGS.chat_context_count : Math.max(1, Math.min(50, chatCtx)),
+            summary_max_words: isNaN(summaryWords) ? DEFAULT_PIPELINE_SETTINGS.summary_max_words : Math.max(50, Math.min(2000, summaryWords)),
+            buffer_min_chars: isNaN(bufMinChars) ? DEFAULT_PIPELINE_SETTINGS.buffer_min_chars : Math.max(5, Math.min(200, bufMinChars)),
+            buffer_flush_delay: isNaN(bufFlushDelay) ? DEFAULT_PIPELINE_SETTINGS.buffer_flush_delay : Math.max(0.5, Math.min(30.0, bufFlushDelay)),
+            lookahead_timeout: isNaN(lookaheadTimeout) ? DEFAULT_PIPELINE_SETTINGS.lookahead_timeout : Math.max(0.0, Math.min(30.0, lookaheadTimeout)),
+            gemini_api_key: settingGeminiKeyInput ? settingGeminiKeyInput.value.trim() : (pipelineSettings.gemini_api_key || ''),
+            deepgram_api_key: settingDeepgramKeyInput ? settingDeepgramKeyInput.value.trim() : (pipelineSettings.deepgram_api_key || ''),
+        };
+
+        try {
+            await chrome.storage.local.set({ kotoba_settings: pipelineSettings });
+            showToast('Settings saved');
+        } catch (e) {
+            showToast('Error saving settings');
+        }
+        closeSettingsModal();
     }
 
     // =========================================================================
@@ -1056,6 +1636,15 @@
         if (translationToggle) {
             translationToggle.disabled = active;
         }
+        if (settingsBtn) {
+            settingsBtn.disabled = active;
+            if (active) {
+                settingsBtn.classList.add('disabled');
+                closeSettingsModal();
+            } else {
+                settingsBtn.classList.remove('disabled');
+            }
+        }
         if (active) {
             isTabAuthorized = true;
             toggleBtn.className = 'kotoba-btn kotoba-btn-danger';
@@ -1083,7 +1672,14 @@
                 channel: resolvedVtuberName || meta.channel,
                 channelLink: meta.channelLink || '',
                 videoId: currentVideoId || getVideoIdFromUrl(window.location.href),
-                translate: isTranslationEnabled
+                translate: isTranslationEnabled,
+                chat_context_count: pipelineSettings.chat_context_count,
+                summary_max_words: pipelineSettings.summary_max_words,
+                buffer_min_chars: pipelineSettings.buffer_min_chars,
+                buffer_flush_delay: pipelineSettings.buffer_flush_delay,
+                lookahead_timeout: pipelineSettings.lookahead_timeout,
+                gemini_api_key: pipelineSettings.gemini_api_key || '',
+                deepgram_api_key: pipelineSettings.deepgram_api_key || '',
             }, (res) => {
                 isBusy = false;
                 if (!res || !res.success) {
@@ -1106,6 +1702,9 @@
         setCaptureState(false);
         if (liveBubble) liveBubble.style.display = 'none';
         chrome.runtime.sendMessage({ action: 'stopTabCapture' }, () => {});
+        if (currentVideoId && (transcriptItems.length > 0 || translationItems.length > 0 || currentSummary)) {
+            flushVideoStateSync(currentVideoId);
+        }
     }
 
     function updateSummaryUI(summaryText) {
@@ -1123,14 +1722,17 @@
     // Video State Persistence & Restoration
     // =========================================================================
 
-    function persistVideoStateDebounced() {
-        if (!currentVideoId) return;
-        clearTimeout(saveStateTimeout);
-        saveStateTimeout = setTimeout(() => {
-            if (!currentVideoId) return;
+    function flushVideoStateSync(vIdToSave) {
+        const vid = vIdToSave || currentVideoId;
+        if (!vid) return;
+        if (saveStateTimeout) {
+            clearTimeout(saveStateTimeout);
+            saveStateTimeout = null;
+        }
+        try {
             chrome.storage.local.set({
-                [`kotoba_state_${currentVideoId}`]: {
-                    videoId: currentVideoId,
+                [`kotoba_state_${vid}`]: {
+                    videoId: vid,
                     metadata: extractYouTubeMetadata(),
                     transcriptItems: transcriptItems.slice(-300),
                     translationItems: translationItems.slice(-300),
@@ -1139,8 +1741,16 @@
                     summary: currentSummary,
                     updatedAt: Date.now()
                 },
-                kotoba_active_video_id: currentVideoId
+                kotoba_active_video_id: vid
             });
+        } catch (e) {}
+    }
+
+    function persistVideoStateDebounced() {
+        if (!currentVideoId) return;
+        clearTimeout(saveStateTimeout);
+        saveStateTimeout = setTimeout(() => {
+            flushVideoStateSync(currentVideoId);
         }, 400);
     }
 
@@ -1176,11 +1786,29 @@
         scrollToBottomFeeds();
     }
 
-    function handleVideoChange(newVideoId) {
-        if (!newVideoId) return;
+    function switchVideo(newVideoId) {
+        if (!newVideoId || newVideoId === currentVideoId) return;
+
+        if (currentVideoId && (transcriptItems.length > 0 || translationItems.length > 0 || currentSummary)) {
+            flushVideoStateSync(currentVideoId);
+        }
+
         if (isCapturing) stopCapture();
 
+        currentVideoId = newVideoId;
+        lastQueriedChannel = '';
+        resolvedVtuberName = '';
+        currentChannelLink = '';
+        lastVtuberProfile = null;
+
+        loadVideoState(newVideoId);
+    }
+
+    function loadVideoState(newVideoId) {
+        if (!newVideoId) return;
         chrome.storage.local.get([`kotoba_state_${newVideoId}`], (result) => {
+            if (currentVideoId !== newVideoId) return;
+
             const saved = result[`kotoba_state_${newVideoId}`];
 
             if (saved && Array.isArray(saved.transcriptItems) && saved.transcriptItems.length > 0) {
@@ -1188,7 +1816,8 @@
                 translationItems = saved.translationItems || [];
                 activeRelevantComment = saved.activeRelevantComment || null;
                 consecutiveNegativeCount = saved.consecutiveNegativeCount || 0;
-                updateSummaryUI(saved.summary || '');
+                currentSummary = saved.summary || '';
+                updateSummaryUI(currentSummary);
                 renderFullFeedFromState();
             } else {
                 transcriptItems = [];
@@ -1196,6 +1825,7 @@
                 activeRelevantComment = null;
                 consecutiveNegativeCount = 0;
                 liveChatMessages = [];
+                currentSummary = '';
                 updateSummaryUI('');
                 if (transcriptsFeed) transcriptsFeed.innerHTML = '';
                 if (translationFeed) translationFeed.innerHTML = '';
@@ -1209,7 +1839,6 @@
                 if (liveBubble) liveBubble.style.display = 'none';
                 if (bubbleQueue) bubbleQueue.innerHTML = '';
                 renderRelevantComment(null);
-                persistVideoStateDebounced();
             }
 
             scheduleMetadataUpdates();
@@ -1232,17 +1861,15 @@
             if (triggerBtn) triggerBtn.style.display = 'flex';
 
             if (vId !== currentVideoId) {
-                stopCapture();
-                currentVideoId = vId;
-                handleVideoChange(vId);
+                switchVideo(vId);
             } else {
                 scheduleMetadataUpdates();
-                persistVideoStateDebounced();
             }
         } else {
             if (triggerBtn) triggerBtn.style.display = 'none';
             if (overlayPanel) {
                 overlayPanel.style.display = 'none';
+                overlayPanel.classList.remove('visible');
                 isOverlayOpen = false;
             }
             if (isCapturing) stopCapture();
@@ -1259,25 +1886,35 @@
         observeYouTubeMetadata();
     }
 
-    document.addEventListener('yt-navigate-start', () => stopCapture());
+    document.addEventListener('yt-navigate-start', () => {
+        if (currentVideoId && (transcriptItems.length > 0 || translationItems.length > 0 || currentSummary)) {
+            flushVideoStateSync(currentVideoId);
+        }
+        stopCapture();
+    });
     document.addEventListener('yt-navigate-finish', () => {
-        setTimeout(checkPageUrl, 80);
-        scheduleMetadataUpdates();
-        observeYouTubeMetadata();
+        checkPageUrl();
     });
     window.addEventListener('popstate', () => {
-        setTimeout(checkPageUrl, 80);
-        scheduleMetadataUpdates();
-        observeYouTubeMetadata();
+        checkPageUrl();
     });
-    window.addEventListener('beforeunload', () => stopCapture());
-    window.addEventListener('pagehide', () => stopCapture());
+    window.addEventListener('beforeunload', () => {
+        if (currentVideoId && (transcriptItems.length > 0 || translationItems.length > 0 || currentSummary)) {
+            flushVideoStateSync(currentVideoId);
+        }
+        stopCapture();
+    });
+    window.addEventListener('pagehide', () => {
+        if (currentVideoId && (transcriptItems.length > 0 || translationItems.length > 0 || currentSummary)) {
+            flushVideoStateSync(currentVideoId);
+        }
+        stopCapture();
+    });
 
     setInterval(() => {
         if (window.location.href !== lastUrl) {
             lastUrl = window.location.href;
             checkPageUrl();
-            observeYouTubeMetadata();
         }
     }, 250);
 

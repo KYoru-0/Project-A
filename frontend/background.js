@@ -161,7 +161,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             title: message.title || '',
                             channel: message.channel || '',
                             channelLink: message.channelLink || '',
-                            translate: Boolean(message.translate)
+                            translate: Boolean(message.translate),
+                            chat_context_count: message.chat_context_count,
+                            summary_max_words: message.summary_max_words,
+                            buffer_min_chars: message.buffer_min_chars,
+                            buffer_flush_delay: message.buffer_flush_delay,
+                            lookahead_timeout: message.lookahead_timeout,
+                            custom_gemini_key: message.gemini_api_key || '',
+                            custom_deepgram_key: message.deepgram_api_key || ''
                         }
                     }, () => {
                         sendResponse({ success: true, streamId });

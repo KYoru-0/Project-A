@@ -142,7 +142,14 @@ async function startRecording(data) {
         // 4. Connect to backend WebSocket
         const langParam = encodeURIComponent(data.lang || 'ja');
         const translateParam = data.translate ? 'true' : 'false';
-        const wsUrl = `ws://127.0.0.1:8000/listen?language=${langParam}&model=nova-3&title=${encodeURIComponent(data.title || '')}&channel=${encodeURIComponent(data.channel || '')}&channel_link=${encodeURIComponent(data.channelLink || '')}&translate=${translateParam}`;
+        let wsUrl = `ws://127.0.0.1:8000/listen?language=${langParam}&model=nova-3&title=${encodeURIComponent(data.title || '')}&channel=${encodeURIComponent(data.channel || '')}&channel_link=${encodeURIComponent(data.channelLink || '')}&translate=${translateParam}`;
+        if (data.chat_context_count !== undefined && data.chat_context_count !== null) wsUrl += `&chat_context_count=${encodeURIComponent(data.chat_context_count)}`;
+        if (data.summary_max_words !== undefined && data.summary_max_words !== null) wsUrl += `&summary_max_words=${encodeURIComponent(data.summary_max_words)}`;
+        if (data.buffer_min_chars !== undefined && data.buffer_min_chars !== null) wsUrl += `&buffer_min_chars=${encodeURIComponent(data.buffer_min_chars)}`;
+        if (data.buffer_flush_delay !== undefined && data.buffer_flush_delay !== null) wsUrl += `&buffer_flush_delay=${encodeURIComponent(data.buffer_flush_delay)}`;
+        if (data.lookahead_timeout !== undefined && data.lookahead_timeout !== null) wsUrl += `&lookahead_timeout=${encodeURIComponent(data.lookahead_timeout)}`;
+        if (data.custom_gemini_key) wsUrl += `&custom_gemini_key=${encodeURIComponent(data.custom_gemini_key)}`;
+        if (data.custom_deepgram_key) wsUrl += `&custom_deepgram_key=${encodeURIComponent(data.custom_deepgram_key)}`;
         socket = new WebSocket(wsUrl);
         socket.binaryType = 'arraybuffer';
 

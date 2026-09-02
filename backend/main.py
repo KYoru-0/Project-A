@@ -86,11 +86,11 @@ DEEPGRAM_KEEPALIVE_INTERVAL_SECONDS: float = 5.0
 LIVE_CHAT_BUFFER_MAX: int = 40  # Maximum live chat items stored per session
 
 # --- API Keys & Clients ---
-deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
+deepgram_api_key = os.getenv("DEEPGRAM_API_KEY") or ""
 if not deepgram_api_key:
-    raise ValueError("DEEPGRAM_API_KEY environment variable is not set.")
+    print(">> [Init Warning] DEEPGRAM_API_KEY environment variable is not set. Custom keys can be provided via Settings.", flush=True)
 
-gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 
 app = FastAPI(title="Project KOTOBA Backend - Live STT & Translation")
 app.add_middleware(
@@ -267,14 +267,15 @@ def split_sentences(text: str) -> list[str]:
 # Gemini Translation Pipeline
 # ==============================================================================
 
-TRANSLATION_SYSTEM_PROMPT = f"""You are a real-time translator specializing in Japanese live streams, VTubers, gaming, and internet culture.
+def build_translation_system_prompt(chat_count: int, summary_words: int) -> str:
+    return f"""You are a real-time translator specializing in Japanese live streams, VTubers, gaming, and internet culture.
 Your goal is to translate Japanese spoken stream speech into clear, natural, and expressive English subtitles.
 
 Guidelines:
 1. Preserve conversational tone, emotions, humor, colloquialisms, and stream slang.
 2. The original text might be incomplete or malformed due to real-time speech recognition; translate based on natural spoken intent and phonetics.
 3. You will receive:
-   - "Recent Live Stream Chat": Numbered list (1 to {CHAT_CONTEXT_COUNT}) of viewer comments the speaker may be reacting or replying to.
+   - "Recent Live Stream Chat": Numbered list (1 to {chat_count}) of viewer comments the speaker may be reacting or replying to.
    - "Running Stream Context Summary": Summary of the stream/conversation topic up to this point.
    - "Sentence 1 (Target Japanese)": The primary sentence to translate.
    - "Sentence 2 (Lookahead Japanese)": The immediate next sentence spoken, provided as forward context.
@@ -282,11 +283,13 @@ Guidelines:
    - If Sentence 1 is a standalone thought, translate ONLY Sentence 1 and return `sentences: 1`.
    - If Sentence 1 and Sentence 2 form a single cohesive thought that MUST be translated together, translate BOTH and return `sentences: 2`.
 5. Chat Response Attribution:
-   - If the speaker is responding to a specific comment, set `relevant_comment` to its 1-based index (1-{CHAT_CONTEXT_COUNT}) and provide `relevant_comment_translation`.
+   - If the speaker is responding to a specific comment, set `relevant_comment` to its 1-based index (1-{chat_count}) and provide `relevant_comment_translation`.
    - If speaking independently, set `relevant_comment: 0` and `relevant_comment_translation: null`.
 6. Context Summary:
-   - In `summary`, provide an updated running summary of the current stream context, topic, and storyline so far based on the inputs and previous summary (maximum {SUMMARY_MAX_WORDS} words, no minimum constraints). Keep it concise, coherent, and informative.
-7. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-{CHAT_CONTEXT_COUNT}), "relevant_comment_translation", "summary"."""
+   - In `summary`, provide an updated running summary of the current stream context, topic, and storyline so far based on the inputs and previous summary (maximum {summary_words} words, no minimum constraints). Keep it concise, coherent, and informative.
+7. Return valid JSON with: "translation", "sentences" (1 or 2), "relevant_comment" (0-{chat_count}), "relevant_comment_translation", "summary"."""
+
+DEFAULT_TRANSLATION_SYSTEM_PROMPT = build_translation_system_prompt(CHAT_CONTEXT_COUNT, SUMMARY_MAX_WORDS)
 
 
 async def translate_japanese_stream(
@@ -297,13 +300,17 @@ async def translate_japanese_stream(
     stream_channel: str = "",
     recent_chat: list[dict] | None = None,
     vtuber_info: dict | None = None,
+    chat_context_count: int = CHAT_CONTEXT_COUNT,
+    summary_max_words: int = SUMMARY_MAX_WORDS,
+    client: genai.Client | None = None,
 ) -> tuple[str, int, int, str, str]:
     """Translate Japanese transcript to English using running summary context.
 
     Returns:
         (translation, sentences_consumed, relevant_comment_idx, relevant_comment_translation, summary)
     """
-    if not gemini_client or not sentence_1.strip():
+    active_client = client or gemini_client
+    if not active_client or not sentence_1.strip():
         return "", 1, 0, "", ""
 
     prompt_parts: list[str] = []
@@ -314,26 +321,33 @@ async def translate_japanese_stream(
         eng = vtuber_info.get("vtuber_names", {}).get("english_name")
         kanji = vtuber_info.get("vtuber_names", {}).get("kanji_name")
         if eng or kanji:
-            v_lines.append(f"VTuber / Streamer: {eng or ''} ({kanji or ''})")
-        facts = vtuber_info.get("facts", [])
-        if facts:
-            v_lines.append("Key Facts & Lore: " + " ".join(facts[:3]))
+            v_lines.append(f"- VTuber Identity: {eng or ''} ({kanji or ''})")
+        office = vtuber_info.get("office")
+        if office:
+            v_lines.append(f"- Agency / Office: {office}")
+        desc = vtuber_info.get("description")
+        if desc:
+            v_lines.append(f"- Background / Lore: {desc[:400]}")
+        facts = vtuber_info.get("quick_facts")
+        if facts and isinstance(facts, list):
+            v_lines.append(f"- Known Traits: {', '.join(facts[:5])}")
         if v_lines:
-            prompt_parts.append("Streamer Profile Context:\n" + "\n".join(v_lines))
+            prompt_parts.append("VTuber Reference Information:\n" + "\n".join(v_lines))
 
-    if stream_channel or stream_title:
-        meta: list[str] = []
-        if stream_channel:
-            meta.append(f"Channel / Speaker: {stream_channel}")
-        if stream_title:
-            meta.append(f"Stream / Video Title: {stream_title}")
+    # Media Metadata
+    meta: list[str] = []
+    if stream_channel:
+        meta.append(f"- Channel: {stream_channel}")
+    if stream_title:
+        meta.append(f"- Stream Title: {stream_title}")
+    if meta:
         prompt_parts.append("Media Metadata:\n" + "\n".join(meta))
 
     if recent_chat:
         lines = "\n".join(
             [
                 f"{i + 1}. [{c.get('author', 'Viewer')}]: {c.get('message', '')}"
-                for i, c in enumerate(recent_chat[-CHAT_CONTEXT_COUNT:])
+                for i, c in enumerate(recent_chat[-chat_context_count:])
                 if c.get("message")
             ]
         )
@@ -352,12 +366,18 @@ async def translate_japanese_stream(
         print(f">> [DEBUG MOCK] Bypassing Gemini: returning '<translation>' for '{sentence_1}'", flush=True)
         return "<translation>", 1, 0, "", current_summary
 
+    sys_prompt = (
+        DEFAULT_TRANSLATION_SYSTEM_PROMPT
+        if chat_context_count == CHAT_CONTEXT_COUNT and summary_max_words == SUMMARY_MAX_WORDS
+        else build_translation_system_prompt(chat_context_count, summary_max_words)
+    )
+
     try:
-        response = await gemini_client.aio.models.generate_content(
+        response = await active_client.aio.models.generate_content(
             model=GEMINI_MODEL,
             contents="\n\n".join(prompt_parts),
             config=types.GenerateContentConfig(
-                system_instruction=TRANSLATION_SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 response_mime_type="application/json",
                 response_schema=TranslationResponse,
                 temperature=GEMINI_TEMPERATURE,
@@ -374,7 +394,7 @@ async def translate_japanese_stream(
                 count = 1
             rel = data.get("relevant_comment", 0)
             rel_trans = str(data.get("relevant_comment_translation") or "").strip()
-            rel_idx = rel if isinstance(rel, int) and 1 <= rel <= CHAT_CONTEXT_COUNT else 0
+            rel_idx = rel if isinstance(rel, int) and 1 <= rel <= chat_context_count else 0
             summary = str(data.get("summary") or "").strip()
             return trans, count, rel_idx, rel_trans, summary
     except Exception as e:
@@ -434,6 +454,13 @@ async def listen(
     channel: str = "",
     channel_link: str = "",
     translate: bool = False,
+    chat_context_count: int = CHAT_CONTEXT_COUNT,
+    summary_max_words: int = SUMMARY_MAX_WORDS,
+    buffer_min_chars: int = BUFFER_MIN_CHARS_THRESHOLD,
+    buffer_flush_delay: float = BUFFER_FLUSH_DELAY_SECONDS,
+    lookahead_timeout: float = TRANSLATION_LOOKAHEAD_TIMEOUT_SECONDS,
+    custom_gemini_key: str = "",
+    custom_deepgram_key: str = "",
 ) -> None:
     """Accept browser audio streams, proxy to Deepgram, and translate in batches."""
     await websocket.accept()
@@ -445,6 +472,36 @@ async def listen(
     pending_buffer: str = ""
     buffer_event = asyncio.Event()
 
+    # Session-local config overrides (from frontend settings panel)
+    sess_chat_context_count = max(1, min(int(chat_context_count), 50))
+    sess_summary_max_words = max(50, min(int(summary_max_words), 2000))
+    sess_buffer_min_chars = max(5, min(int(buffer_min_chars), 200))
+    sess_buffer_flush_delay = max(0.5, min(float(buffer_flush_delay), 30.0))
+    sess_lookahead_timeout = max(0.0, min(float(lookahead_timeout), 30.0))
+
+    # Resolve Deepgram API Key (custom session override or server default)
+    active_dg_key = custom_deepgram_key.strip() if custom_deepgram_key.strip() else deepgram_api_key
+    if not active_dg_key:
+        print(f">> [Session {sid}] Error: No Deepgram API key available.", flush=True)
+        await websocket.send_json({
+            "type": "error",
+            "message": "No Deepgram API key configured. Please enter your key in Settings.",
+        })
+        await websocket.close()
+        return
+
+    # Resolve Gemini API Key / Client (custom session override or server default)
+    active_gemini_key = custom_gemini_key.strip() if custom_gemini_key.strip() else gemini_api_key
+    active_gemini_client = None
+    if active_gemini_key:
+        if active_gemini_key == gemini_api_key and gemini_client:
+            active_gemini_client = gemini_client
+        else:
+            try:
+                active_gemini_client = genai.Client(api_key=active_gemini_key)
+            except Exception as e:
+                print(f">> [Session {sid}] Failed to initialize custom Gemini client: {e}", flush=True)
+
     # Match VTuber from Knowledge Base
     matched_vtuber = kb.lookup(channel_name=channel, channel_link=channel_link)
     display_channel_name = kb.format_display_name(matched_vtuber, fallback=channel)
@@ -454,7 +511,8 @@ async def listen(
     print(f">> [Session {sid}] Connected | Channel: '{display_channel_name}' | Title: '{title}'", flush=True)
     if matched_vtuber:
         print(f">> [VTuber Matched] ID: {matched_vtuber.get('vtuber_id')} -> {display_channel_name}", flush=True)
-    print(f">> STT: nova-3/{req_lang} | Translator: {GEMINI_MODEL if gemini_client else 'None'}", flush=True)
+    print(f">> STT: nova-3/{req_lang} | Translator: {GEMINI_MODEL if active_gemini_client else 'None'}", flush=True)
+    print(f">> [Session {sid}] Settings: chat_ctx={sess_chat_context_count} summary_words={sess_summary_max_words} buf_chars={sess_buffer_min_chars} flush_delay={sess_buffer_flush_delay}s lookahead={sess_lookahead_timeout}s | Custom Keys: DG={'Yes' if custom_deepgram_key.strip() else 'No'}, Gemini={'Yes' if custom_gemini_key.strip() else 'No'}", flush=True)
     print("==========================================", flush=True)
 
     try:
@@ -463,8 +521,8 @@ async def listen(
             "status": "connected",
             "model": "nova-3",
             "language": req_lang,
-            "translation_ready": bool(gemini_client),
-            "translation_model": GEMINI_MODEL if gemini_client else None,
+            "translation_ready": bool(active_gemini_client),
+            "translation_model": GEMINI_MODEL if active_gemini_client else None,
             "vtuber_found": bool(matched_vtuber),
             "display_name": display_channel_name,
             "vtuber_names": matched_vtuber.get("vtuber_names", {}) if matched_vtuber else {},
@@ -490,7 +548,7 @@ async def listen(
     try:
         async with websockets.connect(
             dg_url,
-            additional_headers={"Authorization": f"Token {deepgram_api_key}"},
+            additional_headers={"Authorization": f"Token {active_dg_key}"},
             open_timeout=10,
         ) as dg_ws:
             print(f">> [Session {sid}] Deepgram connected. Streaming audio...", flush=True)
@@ -584,7 +642,7 @@ async def listen(
 
                 async def delayed_flush_runner() -> None:
                     try:
-                        await asyncio.sleep(BUFFER_FLUSH_DELAY_SECONDS)
+                        await asyncio.sleep(sess_buffer_flush_delay)
                         await flush_completed_sentences(is_speech_final=False)
                         check_and_schedule_flush()
                     except asyncio.CancelledError:
@@ -596,7 +654,7 @@ async def listen(
                 def check_and_schedule_flush() -> None:
                     nonlocal flush_timer_task
                     # When remainder reaches threshold AND has at least 1 completed sentence
-                    if len(pending_buffer) >= BUFFER_MIN_CHARS_THRESHOLD:
+                    if len(pending_buffer) >= sess_buffer_min_chars:
                         test_completed, _ = extract_sentences_and_remainder(pending_buffer, min_length=0)
                         if len(test_completed) >= 1:
                             if flush_timer_task is None or flush_timer_task.done():
@@ -686,13 +744,13 @@ async def listen(
                             await buffer_event.wait()
 
                         # If only 1 sentence is in the buffer and timeout is set, wait for lookahead or next sentence
-                        if len(sentence_buffer) < 2 and TRANSLATION_LOOKAHEAD_TIMEOUT_SECONDS > 0:
+                        if len(sentence_buffer) < 2 and sess_lookahead_timeout > 0:
                             buffer_event.clear()
                             if len(sentence_buffer) < 2:
                                 try:
                                     await asyncio.wait_for(
                                         buffer_event.wait(),
-                                        timeout=TRANSLATION_LOOKAHEAD_TIMEOUT_SECONDS,
+                                        timeout=sess_lookahead_timeout,
                                     )
                                 except asyncio.TimeoutError:
                                     pass
@@ -704,7 +762,7 @@ async def listen(
                         s2_text = sentence_buffer[1]["text"] if len(sentence_buffer) > 1 else ""
 
                         ctx = list(context_history)
-                        chat = list(live_chat_buffer[-CHAT_CONTEXT_COUNT:])
+                        chat = list(live_chat_buffer[-sess_chat_context_count:])
 
                         # Broadcast target sentence indicator to frontend
                         ts_now = datetime.now().strftime("%H:%M:%S")
@@ -720,7 +778,7 @@ async def listen(
                         except Exception:
                             pass
 
-                        if not gemini_client:
+                        if not active_gemini_client:
                             del sentence_buffer[0]
                             context_history.append(s1["text"])
                             if len(context_history) > CONTEXT_HISTORY_MAX:
@@ -735,6 +793,9 @@ async def listen(
                             display_channel_name,
                             chat,
                             vtuber_info=matched_vtuber,
+                            chat_context_count=sess_chat_context_count,
+                            summary_max_words=sess_summary_max_words,
+                            client=active_gemini_client,
                         )
                         if summary_text:
                             current_summary = summary_text

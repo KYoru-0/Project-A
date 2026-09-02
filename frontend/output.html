@@ -24,6 +24,12 @@
                 </div>
             </div>
             <div class="header-right">
+                <button class="header-icon-btn settings" id="settings-btn" title="Pipeline Settings">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
                 <div class="status-pill" id="status-pill">
                     <span class="status-dot" id="status-dot"></span>
                     <span class="status-text" id="status-text">Idle</span>
@@ -163,7 +169,7 @@
                                 <path d="M4.5 15.5C3.94772 15.5 3.5 15.0523 3.5 14.5V5.5C3.5 4.39543 4.39543 3.5 5.5 3.5H14.5C15.0523 3.5 15.5 3.94772 15.5 4.5"></path>
                             </svg>
                         </button>
-                        <div class="summary-btn-wrap">
+                        <div class="summary-btn-wrap" id="summary-wrap">
                             <button class="pane-icon-btn" id="summary-btn" title="Stream Context Summary">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -235,6 +241,81 @@
                 <ul class="modal-card-facts-list" id="modal-card-facts">
                     <li class="modal-card-empty-state">No extra database facts found for this channel.</li>
                 </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal Panel -->
+    <div class="modal-backdrop" id="settings-modal">
+        <div class="settings-modal-card">
+            <div class="settings-modal-header">
+                <div class="settings-modal-title-group">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span class="settings-modal-title">Pipeline Settings</span>
+                </div>
+                <button class="settings-modal-close-btn" id="settings-close-btn" title="Close">✕</button>
+            </div>
+            <div class="settings-modal-body">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Chat Context Count</span>
+                        <span class="setting-desc">Number of recent live chat messages passed to Gemini (1 - 50)</span>
+                    </div>
+                    <input type="number" class="setting-input" id="setting-chat-context-count" min="1" max="50" step="1">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Summary Max Words</span>
+                        <span class="setting-desc">Maximum target word count for running stream topic summary (50 - 2000)</span>
+                    </div>
+                    <input type="number" class="setting-input" id="setting-summary-max-words" min="50" max="2000" step="25">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Buffer Min Chars Threshold</span>
+                        <span class="setting-desc">Min character threshold before watching for punctuation marks (5 - 200)</span>
+                    </div>
+                    <input type="number" class="setting-input" id="setting-buffer-min-chars" min="5" max="200" step="1">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Buffer Flush Delay (seconds)</span>
+                        <span class="setting-desc">Delay before auto-flushing completed sentences (0.5 - 30.0s)</span>
+                    </div>
+                    <input type="number" class="setting-input" id="setting-buffer-flush-delay" min="0.5" max="30" step="0.5">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Translation Lookahead Timeout (seconds)</span>
+                        <span class="setting-desc">Lookahead wait timeout for 2nd sentence before translating (0.0 - 30.0s)</span>
+                    </div>
+                    <input type="number" class="setting-input" id="setting-lookahead-timeout" min="0" max="30" step="0.5">
+                </div>
+                <div class="setting-section-divider">API Keys (Optional)</div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Gemini API Key</span>
+                        <span class="setting-desc">Custom key override (leave blank for server default)</span>
+                    </div>
+                    <input type="password" class="setting-input wide" id="setting-gemini-key" placeholder="AIzaSy... (optional)" autocomplete="off">
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Deepgram API Key</span>
+                        <span class="setting-desc">Custom key override (leave blank for server default)</span>
+                    </div>
+                    <input type="password" class="setting-input wide" id="setting-deepgram-key" placeholder="Token... (optional)" autocomplete="off">
+                </div>
+            </div>
+            <div class="settings-modal-footer">
+                <button class="settings-btn reset" id="settings-reset-btn" title="Reset to default settings">Reset Defaults</button>
+                <div class="settings-modal-footer-actions">
+                    <button class="settings-btn secondary" id="settings-cancel-btn">Cancel</button>
+                    <button class="settings-btn primary" id="settings-ok-btn">OK</button>
+                </div>
             </div>
         </div>
     </div>

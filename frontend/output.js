@@ -78,6 +78,42 @@ const modalAvatarImg = document.getElementById('modal-card-avatar-img');
 const modalNameEl = document.getElementById('modal-card-name');
 const modalOfficeEl = document.getElementById('modal-card-office');
 const modalFactsList = document.getElementById('modal-card-facts');
+
+// Settings Modal Elements
+const settingsBtn = document.getElementById('settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const settingsCloseBtn = document.getElementById('settings-close-btn');
+const settingsCancelBtn = document.getElementById('settings-cancel-btn');
+const settingsOkBtn = document.getElementById('settings-ok-btn');
+const settingsResetBtn = document.getElementById('settings-reset-btn');
+const settingChatContextInput = document.getElementById('setting-chat-context-count');
+const settingSummaryWordsInput = document.getElementById('setting-summary-max-words');
+const settingBufferMinCharsInput = document.getElementById('setting-buffer-min-chars');
+const settingBufferFlushDelayInput = document.getElementById('setting-buffer-flush-delay');
+const settingLookaheadTimeoutInput = document.getElementById('setting-lookahead-timeout');
+const settingGeminiKeyInput = document.getElementById('setting-gemini-key');
+const settingDeepgramKeyInput = document.getElementById('setting-deepgram-key');
+
+const DEFAULT_PIPELINE_SETTINGS = {
+    chat_context_count: 20,
+    summary_max_words: 500,
+    buffer_min_chars: 30,
+    buffer_flush_delay: 3.0,
+    lookahead_timeout: 3.0,
+    gemini_api_key: '',
+    deepgram_api_key: '',
+};
+let pipelineSettings = { ...DEFAULT_PIPELINE_SETTINGS };
+
+async function loadPipelineSettings() {
+    try {
+        const data = await chrome.storage.local.get('kotoba_settings');
+        if (data && data.kotoba_settings) {
+            pipelineSettings = { ...DEFAULT_PIPELINE_SETTINGS, ...data.kotoba_settings };
+        }
+    } catch (e) {}
+}
+loadPipelineSettings();
 const modalCloseBtn = document.getElementById('modal-card-close');
 const modalDescWrap = document.getElementById('modal-card-desc-wrap');
 const modalDescText = document.getElementById('modal-card-desc-text');
@@ -522,12 +558,67 @@ function closeVtuberModal() {
     if (vtuberModal) vtuberModal.classList.remove('open');
 }
 
+function populateSettingsInputs() {
+    if (settingChatContextInput) settingChatContextInput.value = pipelineSettings.chat_context_count;
+    if (settingSummaryWordsInput) settingSummaryWordsInput.value = pipelineSettings.summary_max_words;
+    if (settingBufferMinCharsInput) settingBufferMinCharsInput.value = pipelineSettings.buffer_min_chars;
+    if (settingBufferFlushDelayInput) settingBufferFlushDelayInput.value = pipelineSettings.buffer_flush_delay;
+    if (settingLookaheadTimeoutInput) settingLookaheadTimeoutInput.value = pipelineSettings.lookahead_timeout;
+    if (settingGeminiKeyInput) settingGeminiKeyInput.value = pipelineSettings.gemini_api_key || '';
+    if (settingDeepgramKeyInput) settingDeepgramKeyInput.value = pipelineSettings.deepgram_api_key || '';
+}
+
+function openSettingsModal() {
+    if (isCapturing) return;
+    populateSettingsInputs();
+    if (settingsModal) settingsModal.classList.add('open');
+}
+
+function closeSettingsModal() {
+    if (settingsModal) settingsModal.classList.remove('open');
+}
+
+async function savePipelineSettings() {
+    const chatCtx = parseInt(settingChatContextInput?.value, 10);
+    const summaryWords = parseInt(settingSummaryWordsInput?.value, 10);
+    const bufMinChars = parseInt(settingBufferMinCharsInput?.value, 10);
+    const bufFlushDelay = parseFloat(settingBufferFlushDelayInput?.value);
+    const lookaheadTimeout = parseFloat(settingLookaheadTimeoutInput?.value);
+
+    pipelineSettings = {
+        chat_context_count: isNaN(chatCtx) ? DEFAULT_PIPELINE_SETTINGS.chat_context_count : Math.max(1, Math.min(50, chatCtx)),
+        summary_max_words: isNaN(summaryWords) ? DEFAULT_PIPELINE_SETTINGS.summary_max_words : Math.max(50, Math.min(2000, summaryWords)),
+        buffer_min_chars: isNaN(bufMinChars) ? DEFAULT_PIPELINE_SETTINGS.buffer_min_chars : Math.max(5, Math.min(200, bufMinChars)),
+        buffer_flush_delay: isNaN(bufFlushDelay) ? DEFAULT_PIPELINE_SETTINGS.buffer_flush_delay : Math.max(0.5, Math.min(30.0, bufFlushDelay)),
+        lookahead_timeout: isNaN(lookaheadTimeout) ? DEFAULT_PIPELINE_SETTINGS.lookahead_timeout : Math.max(0.0, Math.min(30.0, lookaheadTimeout)),
+        gemini_api_key: settingGeminiKeyInput ? settingGeminiKeyInput.value.trim() : (pipelineSettings.gemini_api_key || ''),
+        deepgram_api_key: settingDeepgramKeyInput ? settingDeepgramKeyInput.value.trim() : (pipelineSettings.deepgram_api_key || ''),
+    };
+
+    try {
+        await chrome.storage.local.set({ kotoba_settings: pipelineSettings });
+        showToast('Settings saved');
+    } catch (e) {
+        showToast('Error saving settings');
+    }
+    closeSettingsModal();
+}
+
 // =============================================================================
 // UI State & Capture Status Controls
 // =============================================================================
 
 function updateCaptureUI(active) {
     if (translationToggle) translationToggle.disabled = active;
+    if (settingsBtn) {
+        settingsBtn.disabled = active;
+        if (active) {
+            settingsBtn.classList.add('disabled');
+            closeSettingsModal();
+        } else {
+            settingsBtn.classList.remove('disabled');
+        }
+    }
     if (active) {
         toggleBtn.dataset.state = 'on';
         toggleBtn.className = 'btn btn-danger';
@@ -801,7 +892,14 @@ toggleBtn.addEventListener('click', async (event) => {
             model: 'nova-3',
             title: ytVideoTitle ? ytVideoTitle.textContent.trim() : '',
             channel: ytChannelName ? ytChannelName.textContent.trim() : '',
-            translate: isTranslationEnabled
+            translate: isTranslationEnabled,
+            chat_context_count: pipelineSettings.chat_context_count,
+            summary_max_words: pipelineSettings.summary_max_words,
+            buffer_min_chars: pipelineSettings.buffer_min_chars,
+            buffer_flush_delay: pipelineSettings.buffer_flush_delay,
+            lookahead_timeout: pipelineSettings.lookahead_timeout,
+            gemini_api_key: pipelineSettings.gemini_api_key || '',
+            deepgram_api_key: pipelineSettings.deepgram_api_key || '',
         }, (res) => {
             isBusy = false;
             if (!res || !res.success) {
@@ -857,6 +955,30 @@ clearBtn.addEventListener('click', async () => {
     showToast('Cleared all items');
 });
 
+// Summary Popover Hold & Toggle Event Listeners
+const summaryWrap = document.getElementById('summary-wrap');
+const summaryPopover = document.getElementById('summary-popover');
+if (summaryBtn && summaryWrap) {
+    summaryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = summaryWrap.classList.toggle('open');
+        summaryBtn.classList.toggle('active', isOpen);
+    });
+}
+
+if (summaryPopover) {
+    summaryPopover.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (summaryWrap && !summaryWrap.contains(e.target)) {
+        summaryWrap.classList.remove('open');
+        if (summaryBtn) summaryBtn.classList.remove('active');
+    }
+});
+
 // VTuber Modal Trigger Event Listeners
 if (ytChannelName) {
     ytChannelName.addEventListener('click', (e) => {
@@ -886,9 +1008,49 @@ if (vtuberModal) {
         if (e.target === vtuberModal) closeVtuberModal();
     });
 }
+
+// Settings Modal Listeners
+if (settingsBtn) {
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!isCapturing) openSettingsModal();
+    });
+}
+if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => closeSettingsModal());
+if (settingsCancelBtn) settingsCancelBtn.addEventListener('click', () => closeSettingsModal());
+if (settingsResetBtn) {
+    settingsResetBtn.addEventListener('click', () => {
+        if (settingChatContextInput) settingChatContextInput.value = DEFAULT_PIPELINE_SETTINGS.chat_context_count;
+        if (settingSummaryWordsInput) settingSummaryWordsInput.value = DEFAULT_PIPELINE_SETTINGS.summary_max_words;
+        if (settingBufferMinCharsInput) settingBufferMinCharsInput.value = DEFAULT_PIPELINE_SETTINGS.buffer_min_chars;
+        if (settingBufferFlushDelayInput) settingBufferFlushDelayInput.value = DEFAULT_PIPELINE_SETTINGS.buffer_flush_delay;
+        if (settingLookaheadTimeoutInput) settingLookaheadTimeoutInput.value = DEFAULT_PIPELINE_SETTINGS.lookahead_timeout;
+        if (settingGeminiKeyInput) settingGeminiKeyInput.value = '';
+        if (settingDeepgramKeyInput) settingDeepgramKeyInput.value = '';
+    });
+}
+if (settingsOkBtn) settingsOkBtn.addEventListener('click', () => savePipelineSettings());
+if (settingsModal) {
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) closeSettingsModal();
+    });
+
+    const blockShortcuts = (e) => {
+        if (e.key === 'Escape') return;
+        e.stopPropagation();
+    };
+    settingsModal.addEventListener('keydown', blockShortcuts);
+    settingsModal.addEventListener('keyup', blockShortcuts);
+    settingsModal.addEventListener('keypress', blockShortcuts);
+}
+
 window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && vtuberModal && vtuberModal.classList.contains('open')) {
-        closeVtuberModal();
+    if (e.key === 'Escape') {
+        if (settingsModal && settingsModal.classList.contains('open')) {
+            closeSettingsModal();
+        } else if (vtuberModal && vtuberModal.classList.contains('open')) {
+            closeVtuberModal();
+        }
     }
 });
 
