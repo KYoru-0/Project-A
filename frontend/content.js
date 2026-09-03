@@ -586,7 +586,7 @@
                         <button class="kotoba-subtle-btn" id="kotoba-clear-btn" title="Clear Feed">Clear Feed</button>
                     </div>
                 </div>
-                <div class="kotoba-relevant-chat-slot" id="kotoba-relevant-chat-slot">
+                <div class="kotoba-relevant-chat-slot" id="kotoba-relevant-chat-slot" style="display: none;">
                     <div class="kotoba-relevant-chat-top">
                         <span class="kotoba-relevant-chat-badge"><span class="kotoba-relevant-chat-dot"></span><span>RELEVANT CHAT</span></span>
                         <span class="kotoba-relevant-chat-author" id="kotoba-relevant-chat-author"></span>
@@ -815,7 +815,13 @@
         translationToggle = shadowRoot.getElementById('kotoba-translation-toggle');
         if (translationToggle) {
             translationToggle.checked = false;
+            if (relevantChatSlot) {
+                relevantChatSlot.style.display = translationToggle.checked ? 'flex' : 'none';
+            }
             translationToggle.addEventListener('change', () => {
+                if (relevantChatSlot) {
+                    relevantChatSlot.style.display = translationToggle.checked ? 'flex' : 'none';
+                }
                 if (translationEmpty && translationItems.length === 0) {
                     translationEmpty.textContent = translationToggle.checked ? 'Translations will appear here.' : 'Translations are turned off';
                 }
@@ -1521,6 +1527,12 @@
 
     function renderRelevantComment(comment) {
         if (!relevantChatSlot) return;
+        const isTranslationEnabled = translationToggle ? translationToggle.checked : false;
+        if (!isTranslationEnabled) {
+            relevantChatSlot.style.display = 'none';
+        } else {
+            relevantChatSlot.style.display = 'flex';
+        }
         if (comment) {
             relevantChatSlot.classList.add('active');
             if (relevantChatAuthor) relevantChatAuthor.textContent = formatAuthorHandle(comment.author);
